@@ -7,3 +7,9 @@ __pycache__/
 
 # Environment variables & API keys
 .env
+
+# Ignore uploaded test files
+app/test_pdfs/
+
+# Local Vector Database Storage 
+qdrant_db/
