@@ -8,8 +8,12 @@ from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 
-# Initialize the embedding model 
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# Initialize the BGE embedding model.
+embeddings = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-base-en-v1.5",
+    model_kwargs={"device": "cpu"},        # swap to "cuda" if a GPU is available
+    encode_kwargs={"normalize_embeddings": True},
+)
 
 
 QDRANT_URL = "http://localhost:6333"

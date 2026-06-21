@@ -1,5 +1,7 @@
 import os
+# pyrefly: ignore [missing-import]
 from langchain_community.document_loaders import PyPDFLoader
+# pyrefly: ignore [missing-import]
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 def process_pdf(file_path: str):
@@ -13,8 +15,8 @@ def process_pdf(file_path: str):
     
     # 2. Split the text with your specified parameters
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=700,
-        chunk_overlap=100
+        chunk_size=1200,
+        chunk_overlap=250
     )
     
     # split_documents applies the chunking logic directly to the loaded LangChain Document objects

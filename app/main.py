@@ -40,8 +40,8 @@ async def upload_and_process_pdf(file: UploadFile = File(...)):
 @app.get("/query/")
 async def query_documents(question: str = Query(..., description="The question to ask your documents")):
     try:
-        # Retrieve the top 4 most relevant chunks
-        retrieved_docs = query_vector_db(query=question, k=4)
+        # Retrieve the top 5 most relevant chunks
+        retrieved_docs = query_vector_db(query=question, k=5)
         
         if not retrieved_docs:
             return {"status": "No relevant documents found."}
@@ -100,7 +100,7 @@ async def ask_question(request: AskRequest):
         answer = generate_answer(request.question, formatted_context)
         
        # GUARDRAIL: Clear sources if the model refused to answer
-        if "I cannot answer this" in answer:
+        if "therefore an answer cannot be generated" in answer:
             sources_metadata = [] # Wipe the sources
             is_faithful = True    # It correctly refused, so it is faithful
         else:

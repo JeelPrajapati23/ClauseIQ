@@ -6,15 +6,16 @@ from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
 
-#Same fast model for both generation and evaluation
+#model for generation
 llm = ChatGroq(
     model="llama-3.1-8b-instant", 
     temperature=0, 
     api_key=os.getenv("GROQ_API_KEY")
 )
 
-def load_prompt(filename="system_prompt_v1.txt"):
+def load_prompt(filename=None):
     """Loads the system prompt from the version-controlled text file."""
+    filename = filename or os.getenv("RAG_SYSTEM_PROMPT_FILE", "system_prompt_v2.txt")
     prompt_path = os.path.join("prompts", filename)
     with open(prompt_path, "r", encoding="utf-8") as file:
         return file.read()
@@ -25,7 +26,7 @@ def generate_answer(question: str, formatted_context: str):
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        ("human", "{question}")
+        ("human", "{question}"),
     ])
 
     parser = StrOutputParser()
