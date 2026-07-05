@@ -16,11 +16,14 @@ export function relativeTime(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
-const STORAGE_KEY = "amd_sessions";
-export function loadSessions() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+// Sessions are namespaced per user so chat history never leaks across
+// accounts sharing the same browser (localStorage has no server-side scoping).
+const storageKeyFor = (userKey) => `clauseiq_sessions_${userKey}`;
+
+export function loadSessions(userKey) {
+  try { return JSON.parse(localStorage.getItem(storageKeyFor(userKey)) || "[]"); }
   catch { return []; }
 }
-export function saveSessions(arr) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); } catch { /* quota exceeded */ }
+export function saveSessions(userKey, arr) {
+  try { localStorage.setItem(storageKeyFor(userKey), JSON.stringify(arr)); } catch { /* quota exceeded */ }
 }

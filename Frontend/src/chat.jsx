@@ -1,14 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { nextId, formatBytes, relativeTime, loadSessions, saveSessions } from "./utils/storage.js";
-import { API_BASE_URL } from "./utils/api.js";
+import { nextId, formatBytes, relativeTime, loadSessions as loadSessionsForUser, saveSessions as saveSessionsForUser } from "./utils/storage.js";
+import { API_BASE_URL, extractErrorMessage } from "./utils/api.js";
 import { IcPlus, IcSearch, IcUpload, IcArrow, IcDoc, IcClose, IcMenu, IcPage, IcCheck, IcAlert, IcChat, IcCopy, IcCopied, IcDots, IcPencil, IcTrash } from "./components/icons.jsx";
 import { FileChip, TypingDots } from "./components/FileChip.jsx";
 import AdminPanel from "./components/AdminPanel.jsx";
 import ResetPasswordModal from "./components/ResetPasswordModal.jsx";
+import clauseiqMark from "./assets/clauseiq-mark.svg";
 
-export default function Chat({ authUser, onLogout }) {
+export default function Chat({ authUser, onLogout, onSessionExpired }) {
+  // Sessions are namespaced per user (see utils/storage.js) so chat history
+  // never leaks across accounts sharing the same browser.
+  const userKey = authUser?.id ?? authUser?.email ?? "anon";
+  const loadSessions = () => loadSessionsForUser(userKey);
+  const saveSessions = (arr) => saveSessionsForUser(userKey, arr);
+
   // ── Sessions (chat history) ───────────────────────────────────────────────
   const [sessions, setSessions] = useState(loadSessions);
   const [activeSessionId, setActiveSessionId] = useState(() => {
@@ -228,8 +235,9 @@ export default function Chat({ authUser, onLogout }) {
       form.append("file", fileObj.raw);
       const res = await fetch(`${API_BASE_URL}/upload-and-index/`, { method: "POST", body: form, credentials: "include" });
       if (!res.ok) {
+        if (res.status === 401) { onSessionExpired?.(); throw new Error("Session expired."); }
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || "Upload failed");
+        throw new Error(extractErrorMessage(errBody, "Upload failed"));
       }
       await res.json();
       setAttached((prev) => prev.map((f) => (f.id === fileObj.id ? { ...f, status: "ready" } : f)));
@@ -314,8 +322,9 @@ export default function Chat({ authUser, onLogout }) {
         { method: "DELETE", credentials: "include" }
       );
       if (!res.ok) {
+        if (res.status === 401) { onSessionExpired?.(); throw new Error("Session expired."); }
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || "Delete failed");
+        throw new Error(extractErrorMessage(body, "Delete failed"));
       }
       const remaining = (activeSess?.uploadedFiles || []).filter((f) => f !== filename);
       setSessions((prev) => {
@@ -373,8 +382,9 @@ export default function Chat({ authUser, onLogout }) {
       });
 
       if (!res.ok) {
+        if (res.status === 401) { onSessionExpired?.(); throw new Error("Session expired."); }
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || "Request failed");
+        throw new Error(extractErrorMessage(errBody, "Request failed"));
       }
 
       const reader  = res.body.getReader();
@@ -502,8 +512,9 @@ export default function Chat({ authUser, onLogout }) {
       });
 
       if (!res.ok) {
+        if (res.status === 401) { onSessionExpired?.(); throw new Error("Session expired."); }
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || "Comparison failed.");
+        throw new Error(extractErrorMessage(errBody, "Comparison failed."));
       }
 
       const reader = res.body.getReader();
@@ -866,10 +877,12 @@ export default function Chat({ authUser, onLogout }) {
       <nav style={{ width: 56, flexShrink: 0, background: T.panel, borderRight: `1px solid ${T.border}`,
         display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 0", gap: 6 }}
         className="hidden-mobile">
-        <div onClick={newChat}
-          style={{ width: 32, height: 32, borderRadius: 9, background: T.accent, display: "grid",
-            placeItems: "center", color: T.accentInk, fontWeight: 700, fontSize: 17, marginBottom: 12,
-            fontFamily: T.sans, cursor: "pointer", userSelect: "none" }}>B</div>
+        <div onClick={newChat} title="ClauseIQ"
+          style={{ width: 32, height: 32, borderRadius: 9, display: "grid",
+            placeItems: "center", marginBottom: 12, overflow: "hidden",
+            cursor: "pointer", userSelect: "none" }}>
+          <img src={clauseiqMark} alt="" width={32} height={32} style={{ display: "block" }} />
+        </div>
         {/* Sidebar collapse toggle */}
         <button onClick={() => setSidebarCollapsed(v => !v)} className="bf-rail"
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -968,8 +981,10 @@ export default function Chat({ authUser, onLogout }) {
             style={{ display: "flex", height: "100%", boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)" }}>
             <nav style={{ width: 56, flexShrink: 0, background: T.panel, borderRight: `1px solid ${T.border}`,
               display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 0", gap: 6 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 9, background: T.accent, display: "grid",
-                placeItems: "center", color: T.accentInk, fontWeight: 700, fontSize: 17, marginBottom: 12 }}>B</div>
+              <div style={{ width: 32, height: 32, borderRadius: 9, display: "grid",
+                placeItems: "center", marginBottom: 12, overflow: "hidden" }}>
+                <img src={clauseiqMark} alt="" width={32} height={32} style={{ display: "block" }} />
+              </div>
             </nav>
             <aside style={{ width: 270, background: T.bg, borderRight: `1px solid ${T.border}`,
               display: "flex", flexDirection: "column", padding: 14 }}>
@@ -994,7 +1009,7 @@ export default function Chat({ authUser, onLogout }) {
             </button>
             <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: T.ink,
               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {activeSess?.name || "Ask My Docs"}
+              {activeSess?.name || "ClauseIQ"}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -1511,6 +1526,7 @@ export default function Chat({ authUser, onLogout }) {
                   onKeyDown={onKeyDown}
                   placeholder={compareMode ? "Compare termination clauses…" : "query this document…"}
                   rows={1}
+                  maxLength={4000}
                   style={{ flex: 1, border: "none", outline: "none", fontFamily: T.mono, fontSize: 13.5,
                     color: T.ink, background: "transparent", minWidth: 0, resize: "none", lineHeight: 1.55,
                     padding: "6px 0", maxHeight: 140 }}
