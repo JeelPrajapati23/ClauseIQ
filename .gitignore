@@ -8,6 +8,7 @@ __pycache__/
 
 # Environment variables & API keys
 .env
+deploy/azure/.env.azure
 
 # Ignore uploaded test files
 app/test_pdfs/

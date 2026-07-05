@@ -4,7 +4,7 @@ from langchain_cohere import CohereRerank
 from langchain_qdrant import QdrantVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchAny, MatchValue, PointIdsList
+from qdrant_client.models import Filter, FieldCondition, MatchAny, MatchValue, PointIdsList, PayloadSchemaType
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
@@ -20,6 +20,31 @@ embeddings = HuggingFaceEmbeddings(
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")  # required by Qdrant Cloud; unset for a local/unauthenticated instance
+
+# Every field ever passed to a Qdrant FieldCondition filter (user_id/source_file scoping
+# on save, delete, retrieval and compare). A local/unauthenticated Qdrant instance filters
+# on unindexed fields without complaint, but Qdrant Cloud rejects the query outright with
+# "Index required but not found" unless a payload index exists for the field.
+_FILTERED_PAYLOAD_FIELDS = ("metadata.user_id", "metadata.source_file")
+
+
+def ensure_payload_indexes(client: QdrantClient, collection_name: str) -> None:
+    """
+    Create a keyword payload index for every field this app ever filters on.
+    Safe to call repeatedly: Qdrant treats re-creating an index with the same
+    field/schema as a no-op, and any unexpected error is swallowed so this
+    never blocks the write path it's called from.
+    """
+    for field_name in _FILTERED_PAYLOAD_FIELDS:
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+        except Exception:
+            pass
+
 
 # Per-user BM25 cache: user_id -> {retriever, version, collection, k, filter}
 _bm25_version: int = 0
@@ -113,6 +138,10 @@ def save_chunks_to_vector_db(chunks, user_id: str, collection_name="pdf_knowledg
         chunk.metadata["user_id"] = user_id
 
     client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    # Must run before the delete-by-filter below, not just after from_documents() —
+    # on a collection that predates this index (e.g. an existing prod collection until
+    # the one-off backfill below has run), the delete filter needs it too.
+    ensure_payload_indexes(client, collection_name)
     source_files = {c.metadata.get("source_file") for c in chunks if c.metadata.get("source_file")}
     for sf in source_files:
         _delete_points_by_filter(
@@ -133,6 +162,9 @@ def save_chunks_to_vector_db(chunks, user_id: str, collection_name="pdf_knowledg
         force_recreate=False,
         check_compatibility=False,
     )
+    # Also re-run after from_documents(): on a first-ever upload the collection didn't
+    # exist for the call above, so this is what actually creates the index for it.
+    ensure_payload_indexes(client, collection_name)
     invalidate_bm25_cache()
 
 

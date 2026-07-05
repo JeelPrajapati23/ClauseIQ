@@ -6,6 +6,7 @@ import torch
 from langchain_qdrant import QdrantVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from qdrant_client import QdrantClient
+from qdrant_client.models import PayloadSchemaType
 
 from app.loader import process_pdf
 
@@ -122,6 +123,15 @@ def index_all_documents():
         )
 
         client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+
+        # Qdrant Cloud rejects filtered queries on unindexed fields (unlike a local,
+        # unauthenticated Qdrant instance) — this app filters on both of these.
+        for field_name in ("metadata.user_id", "metadata.source_file"):
+            client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name=field_name,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
 
         collection_info = client.get_collection(
             COLLECTION_NAME

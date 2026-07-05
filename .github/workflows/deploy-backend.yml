@@ -29,13 +29,15 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build and push image via ACR Tasks
+      - name: Build and push image via local Docker
+        # ACR Tasks (`az acr build`) is disabled on student/trial subscriptions
+        # (TasksOperationsNotAllowed), so build with the runner's own Docker instead.
         run: |
-          az acr build \
-            --registry "${{ secrets.ACR_NAME }}" \
-            --image "clauseiq-backend:${{ github.sha }}" \
-            --image "clauseiq-backend:latest" \
-            .
+          az acr login --name "${{ secrets.ACR_NAME }}"
+          IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/clauseiq-backend"
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
 
       - name: Deploy new image to Container App
         run: |
