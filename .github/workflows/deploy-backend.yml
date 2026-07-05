@@ -1,0 +1,49 @@
+name: Deploy backend to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "prompts/**"
+      - "requirements.txt"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch: {}
+
+# Run one deploy at a time; a second push while one is in flight waits instead
+# of racing it (this app runs as a single Container Apps replica).
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and push image via ACR Tasks
+        run: |
+          az acr build \
+            --registry "${{ secrets.ACR_NAME }}" \
+            --image "clauseiq-backend:${{ github.sha }}" \
+            --image "clauseiq-backend:latest" \
+            .
+
+      - name: Deploy new image to Container App
+        run: |
+          az containerapp update \
+            --name "${{ secrets.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --image "${{ secrets.ACR_NAME }}.azurecr.io/clauseiq-backend:${{ github.sha }}"
+
+      - name: Azure logout
+        if: always()
+        run: az logout

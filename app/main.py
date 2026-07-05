@@ -28,7 +28,7 @@ _REFUSAL_MARKERS = (
 )
 
 from app.loader import process_pdf
-from app.database import save_chunks_to_vector_db, get_reranking_retriever, delete_user_document, attribute_answer_to_parents, QDRANT_URL
+from app.database import save_chunks_to_vector_db, get_reranking_retriever, delete_user_document, attribute_answer_to_parents, QDRANT_URL, QDRANT_API_KEY
 from pydantic import BaseModel, Field, field_validator
 from app.generator import stream_answer, verify_answer_claims, rephrase_question, needs_rephrasing, classify_intent, QueryIntent
 from groq import RateLimitError
@@ -409,7 +409,7 @@ def admin_audit_logs(
 @app.get("/admin/documents")
 def admin_list_documents(admin: User = Depends(require_admin)):
     try:
-        client = QdrantClient(url=QDRANT_URL)
+        client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
         records, _ = client.scroll(
             collection_name="pdf_knowledge_base", limit=5000, with_payload=True
         )

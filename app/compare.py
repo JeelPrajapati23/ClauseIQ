@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-from app.database import embeddings, QDRANT_URL, swap_to_parent_context
+from app.database import embeddings, QDRANT_URL, QDRANT_API_KEY, swap_to_parent_context
 from app.generator import llm
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ def retrieve_per_doc(
         embedding=embeddings,
         collection_name=COLLECTION,
         url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
         check_compatibility=False,
     )
     results: Dict[str, List[Document]] = {}

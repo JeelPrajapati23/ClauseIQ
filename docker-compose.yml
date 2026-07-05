@@ -35,6 +35,7 @@ services:
       - "8000:8000"
     environment:
       QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/clauseiq
       ENVIRONMENT: ${ENVIRONMENT:-production}
       GROQ_API_KEY: ${GROQ_API_KEY}

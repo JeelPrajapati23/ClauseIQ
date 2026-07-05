@@ -17,6 +17,7 @@ DATA_DIR = "./ingestion-docs"
 UPLOAD_DIR = "./uploaded_files"
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 COLLECTION_NAME = "pdf_knowledge_base"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -110,6 +111,7 @@ def index_all_documents():
             documents=all_chunks,
             embedding=embeddings,
             url=QDRANT_URL,
+            api_key=QDRANT_API_KEY,
             collection_name=COLLECTION_NAME,
             force_recreate=True,
             check_compatibility=False
@@ -119,7 +121,7 @@ def index_all_documents():
             "\n[SUCCESS] Documents indexed successfully."
         )
 
-        client = QdrantClient(url=QDRANT_URL)
+        client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
         collection_info = client.get_collection(
             COLLECTION_NAME

@@ -19,6 +19,7 @@ embeddings = HuggingFaceEmbeddings(
 )
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")  # required by Qdrant Cloud; unset for a local/unauthenticated instance
 
 # Per-user BM25 cache: user_id -> {retriever, version, collection, k, filter}
 _bm25_version: int = 0
@@ -32,7 +33,7 @@ def invalidate_bm25_cache() -> None:
 
 def _build_bm25_retriever(collection_name: str, k: int, doc_filter: tuple, user_id: str):
     try:
-        client = QdrantClient(url=QDRANT_URL)
+        client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
         user_filter = Filter(must=[FieldCondition(key="metadata.user_id", match=MatchValue(value=user_id))])
         records, _ = client.scroll(
             collection_name=collection_name,
@@ -111,7 +112,7 @@ def save_chunks_to_vector_db(chunks, user_id: str, collection_name="pdf_knowledg
     for chunk in chunks:
         chunk.metadata["user_id"] = user_id
 
-    client = QdrantClient(url=QDRANT_URL)
+    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
     source_files = {c.metadata.get("source_file") for c in chunks if c.metadata.get("source_file")}
     for sf in source_files:
         _delete_points_by_filter(
@@ -127,6 +128,7 @@ def save_chunks_to_vector_db(chunks, user_id: str, collection_name="pdf_knowledg
         documents=chunks,
         embedding=embeddings,
         url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
         collection_name=collection_name,
         force_recreate=False,
         check_compatibility=False,
@@ -183,7 +185,7 @@ def delete_user_document(source_file: str, user_id: str, collection_name="pdf_kn
     Delete every Qdrant point that belongs to *user_id* and *source_file*.
     Returns the number of points deleted (0 means document not found or error).
     """
-    client = QdrantClient(url=QDRANT_URL)
+    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
     deleted = _delete_points_by_filter(
         client,
         collection_name,
@@ -202,6 +204,7 @@ def query_vector_db(query: str, k: int = 4, collection_name: str = "pdf_knowledg
         embedding=embeddings,
         collection_name=collection_name,
         url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
         check_compatibility=False,
     )
     return qdrant.similarity_search(query=query, k=k)
@@ -251,6 +254,7 @@ def get_reranking_retriever(
         embedding=embeddings,
         collection_name=collection_name,
         url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
         check_compatibility=False,
     )
     vector_retriever = qdrant.as_retriever(search_kwargs={"k": initial_k, "filter": qdrant_filter})

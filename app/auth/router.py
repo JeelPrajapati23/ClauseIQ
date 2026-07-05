@@ -20,6 +20,13 @@ COOKIE_MAX_AGE = 8 * 3600
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
+# Frontend and backend are deployed on different origins (e.g. Vercel + Azure), so the
+# cookie must be SameSite=None to survive cross-site fetches; SameSite=None requires
+# Secure. Locally, frontend/backend share "localhost" as a site (ports are ignored for
+# SameSite purposes) so Lax + non-Secure keeps working over plain HTTP.
+COOKIE_SAMESITE = "none" if ENVIRONMENT == "production" else "lax"
+COOKIE_SECURE = ENVIRONMENT == "production"
+
 
 def _log(db: Session, action: str, user_id: str = None, detail: str = None, ip: str = None):
     db.add(AuditLog(user_id=user_id, action=action, detail=detail, ip_address=ip))
@@ -84,8 +91,8 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
         value=token,
         httponly=True,
         max_age=COOKIE_MAX_AGE,
-        samesite="lax",
-        secure=ENVIRONMENT == "production",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
     )
     _log(db, "login", user_id=user.id, ip=request.client.host if request.client else None)
     return {"message": "Logged in", "role": user.role, "email": user.email, "id": user.id}
@@ -93,7 +100,7 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
 
 @router.post("/logout")
 def logout(response: Response, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, samesite=COOKIE_SAMESITE, secure=COOKIE_SECURE)
     _log(db, "logout", user_id=current_user.id)
     return {"message": "Logged out"}
 
