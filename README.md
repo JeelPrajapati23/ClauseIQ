@@ -1,4 +1,4 @@
-# Ask My Docs — Multi-Tenant RAG for Legal Documents
+# ClauseIQ — Multi-Tenant RAG for Legal Documents
 
 A full-stack Retrieval-Augmented Generation (RAG) system for question-answering and cross-document comparison over legal PDFs (contracts, agreements, licenses). Each user gets an isolated, authenticated workspace — upload your own documents, ask questions grounded strictly in their content, or compare multiple contracts side by side, with every answer checked for faithfulness before it reaches the user.
 
@@ -202,7 +202,7 @@ RAG_SYSTEM_PROMPT_FILE=system_prompt_v3.txt   # optional, defaults to v3
 # Auth
 ENVIRONMENT=development                        # "production" enforces JWT_SECRET_KEY + secure cookies
 JWT_SECRET_KEY=...                             # required in production
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/askmydocs
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/clauseiq
 APP_URL=http://localhost:8000                  # backend origin (also baked into the frontend build as VITE_API_URL)
 APP_FRONTEND_URL=http://localhost:5173         # used to build password-reset redirect links
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
@@ -211,14 +211,14 @@ QDRANT_URL=http://localhost:6333
 # Optional — LangSmith tracing (off if unset)
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=...
-LANGCHAIN_PROJECT=ask-my-docs-rag
+LANGCHAIN_PROJECT=clauseiq-rag
 
 # Optional — Email (omit to print password-reset links to console instead)
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
-FROM_EMAIL=noreply@askmydocs.local
+FROM_EMAIL=noreply@clauseiq.local
 ```
 
 ### Run with Docker Compose (recommended)
@@ -239,7 +239,7 @@ docker compose up --build
 **1. Start Qdrant and Postgres:**
 ```bash
 docker run -p 6333:6333 qdrant/qdrant
-docker run -d --name askmydocs-postgres -p 5433:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=askmydocs postgres:16-alpine
+docker run -d --name clauseiq-postgres -p 5433:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=clauseiq postgres:16-alpine
 ```
 
 **2. Backend:**

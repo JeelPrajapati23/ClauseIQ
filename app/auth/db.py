@@ -6,7 +6,7 @@ from app.auth.models import Base, User
 # Default host port is 5433, not Postgres's usual 5432 — many dev machines already
 # run a native Postgres service on 5432 (this one included), so this app's own
 # container avoids that port entirely rather than fighting over it.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/askmydocs")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/clauseiq")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

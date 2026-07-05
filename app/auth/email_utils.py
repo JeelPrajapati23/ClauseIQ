@@ -10,7 +10,7 @@ SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@askmydocs.local")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@clauseiq.local")
 APP_FRONTEND_URL = os.getenv("APP_FRONTEND_URL", "http://localhost:5173")
 
 
@@ -21,7 +21,7 @@ def send_reset_email(to_email: str, token: str) -> None:
         logger.info("Dev mode: password reset link printed to console for %s", to_email)
         return
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Reset your Ask My Docs password"
+    msg["Subject"] = "Reset your ClauseIQ password"
     msg["From"] = FROM_EMAIL
     msg["To"] = to_email
     msg.attach(MIMEText(

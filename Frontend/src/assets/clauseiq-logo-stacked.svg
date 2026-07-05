@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 340" role="img" aria-label="ClauseIQ">
+  
+  <g transform="translate(116,0) scale(0.25)">
+    <rect width="512" height="512" rx="112" fill="#c6f24a"></rect>
+    <path d="M326.55 356.76 A123 123 0 1 1 326.55 155.24" fill="none" stroke="#0a0b0d" stroke-width="64" stroke-linecap="round"></path>
+    <circle cx="256" cy="256" r="29.7" fill="#0a0b0d"></circle>
+  </g>
+  <text x="180" y="212" text-anchor="middle" class="wm"><tspan fill="#eef0f2">Clause</tspan><tspan fill="#c6f24a">IQ</tspan></text>
+  <text x="180" y="268" text-anchor="middle" font-family="&#39;IBM Plex Mono&#39;, ui-monospace, monospace" font-size="19" letter-spacing="7" fill="#7c828c">DOCUMENT  INTELLIGENCE</text>
+</svg>

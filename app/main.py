@@ -44,7 +44,7 @@ from app.rate_limit import limiter
 from sqlalchemy.orm import Session
 from qdrant_client import QdrantClient
 
-app = FastAPI(title="Ask My Docs RAG")
+app = FastAPI(title="ClauseIQ RAG")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

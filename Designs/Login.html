@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClauseIQ — Sign in</title>
+<link rel="icon" href="favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="assets/icon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+<link rel="manifest" href="site.webmanifest" />
+<meta name="theme-color" content="#0a0b0d" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0b0d; --panel: #101216; --panel2: #15181d; --field: #0c0e11;
+    --ink: #eef0f2; --ink2: #b6bbc2; --muted: #7c828c; --border: #22262d; --border2: #2c313a;
+    --accent: #c6f24a; --accent-ink: #0c1003; --glow: rgba(198,242,74,0.16);
+    --sans: 'Space Grotesk', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  .stage { display: grid; grid-template-columns: 1.05fr 1fr; min-height: 100vh; }
+
+  /* ---------- BRAND PANEL ---------- */
+  .brand {
+    position: relative; overflow: hidden; padding: 48px 56px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    background:
+      radial-gradient(120% 90% at 12% 8%, rgba(198,242,74,0.07), transparent 55%),
+      linear-gradient(180deg, #0c0e11, #0a0b0d 60%);
+    border-right: 1px solid var(--border);
+  }
+  .brand::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 46px 46px; opacity: 0.18;
+    -webkit-mask-image: radial-gradient(80% 70% at 30% 30%, #000, transparent 80%);
+            mask-image: radial-gradient(80% 70% at 30% 30%, #000, transparent 80%);
+    pointer-events: none;
+  }
+  .brand > * { position: relative; z-index: 1; }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo .mark {
+    width: 38px; height: 38px; border-radius: 10px; background: var(--accent);
+    color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; font-size: 21px;
+  }
+  .logo .name { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .pitch { max-width: 460px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 22px;
+  }
+  .pitch h1 {
+    font-size: clamp(30px, 3.4vw, 46px); line-height: 1.08; letter-spacing: -0.025em;
+    font-weight: 700; margin: 0 0 20px;
+  }
+  .pitch p { font-size: 15.5px; line-height: 1.65; color: var(--ink2); margin: 0; max-width: 400px; }
+
+  .demo-card {
+    margin-top: 30px; border: 1px solid var(--border); border-radius: 14px; background: rgba(21,24,29,0.7);
+    backdrop-filter: blur(6px); padding: 18px 20px; max-width: 440px;
+  }
+  .demo-q { font-size: 14px; color: var(--ink2); margin-bottom: 12px; }
+  .demo-a { font-size: 14.5px; line-height: 1.6; }
+  .demo-a strong { color: var(--accent); font-weight: 600; }
+  .cite {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--accent);
+    border: 1px solid var(--border2); padding: 1px 6px; border-radius: 6px; margin: 0 2px; white-space: nowrap;
+  }
+
+  .roles { display: flex; gap: 8px; flex-wrap: wrap; }
+  .role {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px;
+  }
+
+  /* ---------- FORM PANEL ---------- */
+  .formwrap { display: flex; align-items: center; justify-content: center; padding: 48px 40px; }
+  .card { width: 100%; max-width: 392px; }
+
+  .card .head { margin-bottom: 28px; }
+  .card .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px;
+  }
+  .card h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .card .sub { font-size: 14px; color: var(--muted); margin: 0; }
+
+  .sso { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+  .btn-sso {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border2);
+    background: var(--panel); color: var(--ink); font-family: var(--sans); font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all .15s;
+  }
+  .btn-sso:hover { border-color: var(--muted); background: var(--panel2); }
+
+  .divider { display: flex; align-items: center; gap: 14px; margin: 22px 0; }
+  .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
+  .divider span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--muted); }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+  }
+  .input {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--border2); border-radius: 10px; background: var(--field);
+    padding: 0 12px; transition: border-color .15s, box-shadow .15s;
+  }
+  .input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+  .input input {
+    flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+    color: var(--ink); font-family: var(--sans); font-size: 14.5px; padding: 12px 0;
+  }
+  .input input::placeholder { color: var(--muted); }
+  .input .icon { color: var(--muted); display: grid; place-items: center; flex-shrink: 0; }
+  .ghost-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; display: grid; place-items: center; border-radius: 6px; }
+  .ghost-btn:hover { color: var(--ink); }
+
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 22px; }
+  .check { display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; font-size: 13px; color: var(--ink2); }
+  .box {
+    width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--border2); background: var(--field);
+    display: grid; place-items: center; transition: all .15s; flex-shrink: 0;
+  }
+  .check input { display: none; }
+  .check input:checked + .box { background: var(--accent); border-color: var(--accent); }
+  .check input:checked + .box svg { opacity: 1; }
+  .box svg { opacity: 0; color: var(--accent-ink); }
+  .link { font-size: 13px; color: var(--accent); text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+
+  .btn-primary {
+    width: 100%; padding: 13px; border-radius: 10px; border: none;
+    background: var(--accent); color: var(--accent-ink); font-family: var(--sans); font-weight: 600; font-size: 15px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: filter .15s;
+  }
+  .btn-primary:hover { filter: brightness(1.07); }
+
+  .signup { text-align: center; font-size: 13.5px; color: var(--muted); margin-top: 24px; }
+  .signup a { color: var(--ink); text-decoration: none; font-weight: 500; border-bottom: 1px solid var(--border2); }
+  .signup a:hover { border-color: var(--accent); color: var(--accent); }
+
+  .foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: 40px; font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .foot .secure { display: flex; align-items: center; gap: 7px; }
+
+  .mobile-logo { display: none; }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 860px) {
+    .stage { grid-template-columns: 1fr; }
+    .brand { display: none; }
+    .formwrap { padding: 32px 22px; min-height: 100vh; }
+    .mobile-logo { display: flex; align-items: center; gap: 11px; justify-content: center; margin-bottom: 34px; }
+    .mobile-logo .mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; font-size: 19px; }
+    .mobile-logo .name { font-size: 20px; font-weight: 700; }
+    .card .head { text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <!-- BRAND PANEL -->
+  <section class="brand">
+    <div class="logo">
+      <img class="mark" src="assets/clauseiq-mark.svg" alt="" style="background:none;" />
+      <div class="name">Clause<span style="color:var(--accent);">IQ</span></div>
+    </div>
+
+    <div class="pitch">
+      <div class="eyebrow">Legal document intelligence</div>
+      <h1>Read contracts at the speed of a question.</h1>
+      <p>Upload an agreement and ask anything. ClauseIQ answers in plain language — and cites the exact clause every single time.</p>
+
+      <div class="demo-card">
+        <div class="demo-q"><span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.08em;">YOU&nbsp;&nbsp;</span>When can either party terminate for convenience?</div>
+        <div class="demo-a"><span style="font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.08em;">CLAUSEIQ&nbsp;&nbsp;</span>Either party may terminate with <strong>60 days' written notice</strong><span class="cite">§12.2</span>, and accrued fees remain payable<span class="cite">§12.4</span>.</div>
+      </div>
+    </div>
+
+    <div class="roles">
+      <div class="role">Legal &amp; paralegal teams</div>
+      <div class="role">Compliance officers</div>
+      <div class="role">Independent professionals</div>
+    </div>
+  </section>
+
+  <!-- FORM PANEL -->
+  <section class="formwrap">
+    <div class="card">
+      <div class="mobile-logo">
+        <img class="mark" src="assets/clauseiq-mark.svg" alt="" style="background:none;" />
+        <div class="name">Clause<span style="color:var(--accent);">IQ</span></div>
+      </div>
+
+      <div class="head">
+        <div class="kicker">Welcome back</div>
+        <h2>Sign in to ClauseIQ</h2>
+        <p class="sub">Pick up your document reviews where you left off.</p>
+      </div>
+
+      <div class="sso">
+        <button class="btn-sso" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.74-6-6.1S8.7 5.9 12 5.9c1.9 0 3.16.8 3.9 1.5l2.65-2.55C16.9 3.3 14.7 2.4 12 2.4 6.9 2.4 2.8 6.5 2.8 11.6S6.9 20.8 12 20.8c5.9 0 9.8-4.15 9.8-9.99 0-.67-.07-1.18-.16-1.69H12z"/></svg>
+          Continue with Google
+        </button>
+        <button class="btn-sso" type="button">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Continue with SSO
+        </button>
+      </div>
+
+      <div class="divider"><span>OR</span></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="email">Work email</label>
+          <div class="input">
+            <span class="icon">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            </span>
+            <input id="email" name="email" type="email" autocomplete="email" placeholder="you@firm.com" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input">
+            <span class="icon">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </span>
+            <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••••" />
+            <button class="ghost-btn" type="button" id="togglePw" aria-label="Show password">
+              <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="check">
+            <input type="checkbox" id="remember" checked />
+            <span class="box"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            Keep me signed in
+          </label>
+          <a class="link" href="#">Forgot password?</a>
+        </div>
+
+        <button class="btn-primary" type="submit">
+          Sign in
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </form>
+
+      <div class="signup">New to ClauseIQ? <a href="#">Request access</a></div>
+
+      <div class="foot">
+        <span class="secure">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          SOC 2 · encrypted
+        </span>
+        <span>© 2026 ClauseIQ</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var pw = document.getElementById('password');
+    var toggle = document.getElementById('togglePw');
+    var eye = document.getElementById('eyeIcon');
+    var shown = false;
+    toggle.addEventListener('click', function () {
+      shown = !shown;
+      pw.type = shown ? 'text' : 'password';
+      eye.innerHTML = shown
+        ? '<path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 5.4-1.6"/><path d="M1 1l22 22"/><path d="M9.5 9.5a3 3 0 0 0 4.2 4.2"/>'
+        : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = e.target.querySelector('.btn-primary');
+      btn.style.filter = 'brightness(0.9)';
+      btn.textContent = 'Signing in…';
+      setTimeout(function () { window.location.href = 'Brief.html'; }, 700);
+    });
+  })();
+</script>
+</body>
+</html>

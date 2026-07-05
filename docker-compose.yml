@@ -11,7 +11,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: askmydocs
+      POSTGRES_DB: clauseiq
     # Host port 5433, not Postgres's usual 5432 — avoids clashing with a native
     # Postgres install some dev machines already run (this one included).
     # Doesn't affect backend<->postgres traffic, which stays on the internal
@@ -30,7 +30,7 @@ services:
       - "8000:8000"
     environment:
       QDRANT_URL: http://qdrant:6333
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/askmydocs
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/clauseiq
       ENVIRONMENT: ${ENVIRONMENT:-production}
       GROQ_API_KEY: ${GROQ_API_KEY}
       COHERE_API_KEY: ${COHERE_API_KEY}
@@ -43,7 +43,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      FROM_EMAIL: ${FROM_EMAIL:-noreply@askmydocs.local}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@clauseiq.local}
     volumes:
       - ./uploaded_files:/app/uploaded_files
       - ./logs:/app/logs
