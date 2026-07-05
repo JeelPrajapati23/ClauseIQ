@@ -6,8 +6,13 @@ from app.auth.models import Base, User
 # Default host port is 5433, not Postgres's usual 5432 — many dev machines already
 # run a native Postgres service on 5432 (this one included), so this app's own
 # container avoids that port entirely rather than fighting over it.
+# pool_pre_ping issues a lightweight liveness check before handing out a pooled
+# connection. Neon (and most managed Postgres) silently closes idle connections
+# server-side; without this, the pool hands back a dead connection and every
+# query on it fails with "SSL connection has been closed unexpectedly" instead
+# of transparently reconnecting.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/clauseiq")
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
