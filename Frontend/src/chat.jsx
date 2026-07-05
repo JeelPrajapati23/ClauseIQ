@@ -233,7 +233,7 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
     try {
       const form = new FormData();
       form.append("file", fileObj.raw);
-      const res = await fetch(`${API_BASE_URL}/upload-and-index/`, { method: "POST", body: form, credentials: "include" });
+      const res = await fetch(`${API_BASE_URL}/upload-and-index`, { method: "POST", body: form, credentials: "include" });
       if (!res.ok) {
         if (res.status === 401) { onSessionExpired?.(); throw new Error("Session expired."); }
         const errBody = await res.json().catch(() => ({}));
@@ -374,7 +374,7 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
     setMessages([...localMessages]);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/ask/`, {
+      const res = await fetch(`${API_BASE_URL}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -504,7 +504,7 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
     setMessages([...localMessages]);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/compare/`, {
+      const res = await fetch(`${API_BASE_URL}/compare`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

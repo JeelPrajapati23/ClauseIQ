@@ -110,7 +110,7 @@ flowchart TB
     Admin --> Qdrant
 ```
 
-**Request flow for `/ask/`:**
+**Request flow for `/ask`:**
 
 1. Classify intent (`FACT` / `ANALYTICAL`) → picks retrieval width + system prompt.
 2. If the question references prior turns ("it", "that", …), rephrase into a standalone query using conversation history.

@@ -124,7 +124,7 @@ def _safe_filename(filename: str) -> str:
     return name
 
 
-@app.post("/upload-and-index/")
+@app.post("/upload-and-index")
 @limiter.limit("10/minute")
 async def upload_and_process_pdf(
     request: Request,
@@ -225,7 +225,7 @@ class AskRequest(BaseModel):
         return turns
 
 
-@app.post("/ask/")
+@app.post("/ask")
 @limiter.limit("20/minute")
 async def ask_question(
     request: Request,
@@ -338,7 +338,7 @@ class CompareRequest(BaseModel):
     query: str = Field(max_length=MAX_QUESTION_LEN)
 
 
-@app.post("/compare/")
+@app.post("/compare")
 @limiter.limit("10/minute")
 async def compare_documents(
     request: Request,
