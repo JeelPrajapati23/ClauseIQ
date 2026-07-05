@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -9,6 +10,8 @@ from app.auth.utils import hash_password, verify_password, create_access_token, 
 from app.auth.email_utils import send_reset_email
 from app.auth.dependencies import get_current_user
 from app.rate_limit import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -113,7 +116,10 @@ def forgot_password(body: ForgotPasswordRequest, request: Request, db: Session =
         try:
             send_reset_email(user.email, token)
         except Exception:
-            pass
+            # Never let a broken SMTP config surface to the client (still returns the
+            # generic message below to avoid user enumeration) — but log it, since this
+            # used to fail completely silently and was impossible to debug.
+            logger.exception("Failed to send password reset email to %s", user.email)
         _log(db, "forgot_password", user_id=user.id, ip=request.client.host if request.client else None)
     return {"message": "If that email is registered, a reset link has been sent."}
 
