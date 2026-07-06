@@ -30,3 +30,18 @@ class AuditLog(Base):
     detail = Column(Text, nullable=True)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DocumentJob(Base):
+    """Tracks an upload's background parsing/chunking/embedding, so the upload
+    request itself can return immediately instead of blocking on CPU embedding
+    long enough to risk Vercel's ~120s proxy timeout (see /upload-and-index)."""
+    __tablename__ = "document_jobs"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    source_file = Column(String, nullable=False)
+    status = Column(String, default="processing")  # "processing" | "ready" | "failed"
+    error_message = Column(Text, nullable=True)
+    total_chunks = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

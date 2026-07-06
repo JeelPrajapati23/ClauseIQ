@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { nextId, formatBytes, relativeTime, loadSessions as loadSessionsForUser, saveSessions as saveSessionsForUser } from "./utils/storage.js";
+import { nextId, formatBytes, relativeTime, loadSessions as loadSessionsForUser, saveSessions as saveSessionsForUser, loadPendingJobs as loadPendingJobsForUser, savePendingJobs as savePendingJobsForUser } from "./utils/storage.js";
 import { API_BASE_URL, extractErrorMessage } from "./utils/api.js";
 import { IcPlus, IcSearch, IcUpload, IcArrow, IcDoc, IcClose, IcMenu, IcPage, IcCheck, IcAlert, IcChat, IcCopy, IcCopied, IcDots, IcPencil, IcTrash } from "./components/icons.jsx";
 import { FileChip, TypingDots } from "./components/FileChip.jsx";
@@ -15,6 +15,8 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
   const userKey = authUser?.id ?? authUser?.email ?? "anon";
   const loadSessions = () => loadSessionsForUser(userKey);
   const saveSessions = (arr) => saveSessionsForUser(userKey, arr);
+  const loadPendingJobs = () => loadPendingJobsForUser(userKey);
+  const savePendingJobs = (arr) => savePendingJobsForUser(userKey, arr);
 
   // ── Sessions (chat history) ───────────────────────────────────────────────
   const [sessions, setSessions] = useState(loadSessions);
@@ -228,6 +230,67 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
   };
 
   // ── Upload ────────────────────────────────────────────────────────────────
+  // Upload returns almost immediately (202 + job id) — parsing/chunking/embedding
+  // happens in a background task on the server, so this never risks Vercel's
+  // ~120s proxy timeout no matter how long embedding actually takes. We poll
+  // /upload-jobs/{id} until the backend reports "ready" or "failed".
+  const POLL_INTERVAL_MS = 3000;
+
+  const addPendingJob = (job) => savePendingJobs([...loadPendingJobs(), job]);
+  const removePendingJob = (jobId) => savePendingJobs(loadPendingJobs().filter((j) => j.jobId !== jobId));
+
+  const pollJobStatus = (jobId, fileId, targetSessionId, filename) => {
+    const tick = async () => {
+      let res;
+      try {
+        res = await fetch(`${API_BASE_URL}/upload-jobs/${jobId}`, { credentials: "include" });
+      } catch {
+        setTimeout(tick, POLL_INTERVAL_MS); // transient network blip — keep trying
+        return;
+      }
+      if (res.status === 401) { onSessionExpired?.(); removePendingJob(jobId); return; }
+      if (!res.ok) {
+        removePendingJob(jobId);
+        if (fileId) setAttached((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "error", errorMessage: "Lost track of this upload. Please try again." } : f)));
+        return;
+      }
+      const job = await res.json();
+      if (job.status === "processing") {
+        setTimeout(tick, POLL_INTERVAL_MS);
+        return;
+      }
+      removePendingJob(jobId);
+      if (job.status === "ready") {
+        if (fileId) setAttached((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "ready" } : f)));
+        setSessions((prev) => {
+          const updated = prev.map((s) =>
+            s.id === targetSessionId
+              ? { ...s, uploadedFiles: [...(s.uploadedFiles || []), filename] }
+              : s
+          );
+          saveSessions(updated);
+          return updated;
+        });
+      } else {
+        const message = job.error || "Failed to process the uploaded document.";
+        if (fileId) {
+          setAttached((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "error", errorMessage: message } : f)));
+        } else {
+          setUploadError(`"${filename}" failed to process: ${message}`);
+          setTimeout(() => setUploadError(null), 6000);
+        }
+      }
+    };
+    tick();
+  };
+
+  // Resume polling for any upload that was still processing when the page was
+  // last closed/refreshed — status lives on the backend, so nothing is lost.
+  useEffect(() => {
+    loadPendingJobs().forEach((job) => pollJobStatus(job.jobId, null, job.sessionId, job.filename));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const uploadFile = async (fileObj, targetSessionId) => {
     setAttached((prev) => prev.map((f) => (f.id === fileObj.id ? { ...f, status: "uploading" } : f)));
     try {
@@ -239,19 +302,12 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(extractErrorMessage(errBody, "Upload failed"));
       }
-      await res.json();
-      setAttached((prev) => prev.map((f) => (f.id === fileObj.id ? { ...f, status: "ready" } : f)));
-      setSessions((prev) => {
-        const updated = prev.map((s) =>
-          s.id === targetSessionId
-            ? { ...s, uploadedFiles: [...(s.uploadedFiles || []), fileObj.name] }
-            : s
-        );
-        saveSessions(updated);
-        return updated;
-      });
-    } catch {
-      setAttached((prev) => prev.map((f) => (f.id === fileObj.id ? { ...f, status: "error" } : f)));
+      const { job_id, filename } = await res.json();
+      setAttached((prev) => prev.map((f) => (f.id === fileObj.id ? { ...f, status: "processing" } : f)));
+      addPendingJob({ jobId: job_id, filename, sessionId: targetSessionId });
+      pollJobStatus(job_id, fileObj.id, targetSessionId, filename);
+    } catch (err) {
+      setAttached((prev) => prev.map((f) => (f.id === fileObj.id ? { ...f, status: "error", errorMessage: err.message } : f)));
     }
   };
 
@@ -1084,7 +1140,8 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
                 <h2 style={{ fontFamily: T.sans, fontSize: 20, fontWeight: 700, color: T.ink,
                   margin: "0 0 8px" }}>Upload failed</h2>
                 <p style={{ fontFamily: T.mono, fontSize: 12, color: T.muted, margin: "0 0 24px", lineHeight: 1.6 }}>
-                  The file could not be indexed. Check the error on the chip above and try again.
+                  {attached.find((f) => f.status === "error")?.errorMessage
+                    || "The file could not be indexed. Check the error on the chip above and try again."}
                 </p>
                 <button
                   onClick={() => { setView("empty"); setAttached([]); setProcState({ name: "", progress: 0 }); }}
@@ -1104,7 +1161,7 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
                     <div style={{ fontFamily: T.mono, fontSize: 13, color: T.ink,
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{procState.name}</div>
                     <div style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, marginTop: 3 }}>
-                      Indexing · building embeddings
+                      Indexing · building embeddings · can take a couple of minutes for large PDFs
                     </div>
                   </div>
                 </div>
@@ -1505,7 +1562,7 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
               {attached.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                   {attached.map((f) => (
-                    <FileChip key={f.id} name={f.name} size={f.size} status={f.status}
+                    <FileChip key={f.id} name={f.name} size={f.size} status={f.status} errorMessage={f.errorMessage}
                       onRemove={() => removeAttached(f.id)} onRetry={() => retryUpload(f.id)} />
                   ))}
                 </div>

@@ -27,3 +27,16 @@ export function loadSessions(userKey) {
 export function saveSessions(userKey, arr) {
   try { localStorage.setItem(storageKeyFor(userKey), JSON.stringify(arr)); } catch { /* quota exceeded */ }
 }
+
+// Tracks in-flight upload-indexing jobs (see /upload-jobs/{id}) so a page reload
+// mid-processing resumes polling instead of losing track of the upload — status
+// lives on the backend, this is just enough to know which jobs to ask about.
+const jobsKeyFor = (userKey) => `clauseiq_pending_jobs_${userKey}`;
+
+export function loadPendingJobs(userKey) {
+  try { return JSON.parse(localStorage.getItem(jobsKeyFor(userKey)) || "[]"); }
+  catch { return []; }
+}
+export function savePendingJobs(userKey, arr) {
+  try { localStorage.setItem(jobsKeyFor(userKey), JSON.stringify(arr)); } catch { /* quota exceeded */ }
+}

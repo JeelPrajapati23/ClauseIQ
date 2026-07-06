@@ -11,8 +11,8 @@ export function TypingDots() {
   );
 }
 
-export function FileChip({ name, size, status, onRemove, onRetry }) {
-  const isUploading = status === "uploading" || status === "pending";
+export function FileChip({ name, size, status, errorMessage, onRemove, onRetry }) {
+  const isUploading = status === "uploading" || status === "pending" || status === "processing";
   const isError = status === "error";
   return (
     <div style={{
@@ -23,7 +23,8 @@ export function FileChip({ name, size, status, onRemove, onRetry }) {
       color: isError ? "#ff8a80" : "#b6bbc2", maxWidth: 200,
     }}>
       {isUploading ? <IcSpin s={12} /> : isError ? <IcAlert s={12} /> : <IcDoc s={12} />}
-      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={name}>{name}</span>
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        title={isError && errorMessage ? errorMessage : name}>{name}</span>
       {size && !isError && <span style={{ opacity: 0.6, flexShrink: 0, fontSize: 10 }}>{size}</span>}
       {isError && onRetry && (
         <button onClick={onRetry} style={{ fontSize: 10, textDecoration: "underline", color: "#ff8a80", flexShrink: 0, background: "none", border: "none", cursor: "pointer" }}>retry</button>

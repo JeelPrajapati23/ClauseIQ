@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -34,8 +34,8 @@ from app.generator import stream_answer, verify_answer_claims, rephrase_question
 from groq import RateLimitError
 from app.compare import retrieve_per_doc, stream_comparison
 
-from app.auth.db import init_db, get_db
-from app.auth.models import User, AuditLog
+from app.auth.db import init_db, get_db, SessionLocal
+from app.auth.models import User, AuditLog, DocumentJob
 from app.auth.schemas import UserAdminItem, AuditLogItem
 from app.auth.dependencies import require_active_user, require_admin
 from app.auth.router import router as auth_router
@@ -124,10 +124,39 @@ def _safe_filename(filename: str) -> str:
     return name
 
 
-@app.post("/upload-and-index")
+def _run_indexing_job(job_id: str, file_path: str, user_id: str, safe_filename: str, client_ip: str):
+    """Runs PDF parsing/chunking/embedding in the background, after the upload
+    request has already returned — this is the CPU-bound step (embedding every
+    chunk through bge-base-en-v1.5) that used to run inline and could take long
+    enough to trip Vercel's ~120s proxy timeout on a large document. Opens its
+    own DB session since the request's session is closed by the time this runs."""
+    db = SessionLocal()
+    try:
+        chunks = process_pdf(file_path)
+        save_chunks_to_vector_db(chunks, user_id=user_id)
+        job = db.query(DocumentJob).filter(DocumentJob.id == job_id).first()
+        if job:
+            job.status = "ready"
+            job.total_chunks = len(chunks)
+            db.commit()
+        _log(db, "upload", user_id=user_id, detail=safe_filename, ip=client_ip)
+    except Exception:
+        logger.exception("upload-and-index background job failed for user=%s file=%s", user_id, safe_filename)
+        db.rollback()
+        job = db.query(DocumentJob).filter(DocumentJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error_message = "Failed to process the uploaded document. Please try again."
+            db.commit()
+    finally:
+        db.close()
+
+
+@app.post("/upload-and-index", status_code=202)
 @limiter.limit("10/minute")
 async def upload_and_process_pdf(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(require_active_user),
     db: Session = Depends(get_db),
@@ -168,18 +197,39 @@ async def upload_and_process_pdf(
             f"PDF has {page_count} pages — maximum allowed is {MAX_PAGES} pages.",
         )
 
-    try:
-        chunks = process_pdf(file_path)
-        save_chunks_to_vector_db(chunks, user_id=current_user.id)
-        _log(db, "upload", user_id=current_user.id, detail=safe_filename, ip=get_client_ip(request))
-        return {
-            "filename": safe_filename,
-            "status": "Successfully chunked and embedded",
-            "total_chunks_saved": len(chunks),
-        }
-    except Exception:
-        logger.exception("upload-and-index failed for user=%s file=%s", current_user.id, safe_filename)
-        raise HTTPException(500, "Failed to process the uploaded document. Please try again.")
+    # Everything above is fast (file I/O, page count). Parsing/chunking/embedding
+    # is the slow, CPU-bound part — hand it to a background task so this request
+    # returns immediately, regardless of how long that takes.
+    job = DocumentJob(user_id=current_user.id, source_file=safe_filename, status="processing")
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    background_tasks.add_task(
+        _run_indexing_job, job.id, file_path, current_user.id, safe_filename, get_client_ip(request)
+    )
+
+    return {"job_id": job.id, "filename": safe_filename, "status": "processing"}
+
+
+@app.get("/upload-jobs/{job_id}")
+async def get_upload_job_status(
+    job_id: str,
+    current_user: User = Depends(require_active_user),
+    db: Session = Depends(get_db),
+):
+    job = db.query(DocumentJob).filter(
+        DocumentJob.id == job_id, DocumentJob.user_id == current_user.id
+    ).first()
+    if not job:
+        raise HTTPException(404, "Upload job not found.")
+    return {
+        "job_id": job.id,
+        "filename": job.source_file,
+        "status": job.status,
+        "error": job.error_message,
+        "total_chunks": job.total_chunks,
+    }
 
 
 @app.delete("/documents/{source_file:path}")
