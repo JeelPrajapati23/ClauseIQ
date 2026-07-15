@@ -42,6 +42,7 @@ Built as an end-to-end system: FastAPI backend, Qdrant hybrid search + Cohere re
 **Multi-Tenancy & Auth**
 - JWT-cookie authentication (httponly, 8h expiry) backed by Postgres, with password reset and per-account login lockout after repeated failures.
 - Every document and every Qdrant vector is scoped to `user_id` — no cross-user data access anywhere in ask/compare/delete.
+- **Chat history persists server-side in Postgres**, not the browser — conversations, citations, and verification results follow the account across devices/browsers/logouts instead of living in `localStorage`.
 - Admin panel: user activation/deactivation, audit log viewer, cross-tenant document inventory.
 - Full audit trail (`audit_logs` table) for register/login/logout/upload/ask/compare/delete/admin actions.
 - Rate limiting (per-IP) and per-account lockout as independent defenses against brute force.
@@ -78,7 +79,7 @@ flowchart TB
 
     subgraph Data["Data Stores"]
         Qdrant[("Qdrant<br/>vectors, per-user filtered")]
-        Postgres[("Postgres<br/>users, audit_logs")]
+        Postgres[("Postgres<br/>users, audit_logs, chat history")]
         Files[("uploaded_files/{user_id}/")]
     end
 
@@ -151,7 +152,7 @@ flowchart TB
 ```
 ask-my-docs-rag/
 ├── app/
-│   ├── main.py                 # FastAPI routes: upload, ask (SSE), compare (SSE), delete, admin
+│   ├── main.py                 # FastAPI routes: upload, ask (SSE), compare (SSE), delete, chat sessions, admin
 │   ├── pdf_parser.py           # PyMuPDF extraction, two-column detection, reading-order sort
 │   ├── loader.py               # Parent-child chunking (2000/0 parents, 350/50 children)
 │   ├── database.py             # Qdrant client, BM25 cache, hybrid retriever, reranker, attribution
@@ -161,7 +162,7 @@ ask-my-docs-rag/
 │   ├── create_qdrant_indexes.py # One-off backfill: Qdrant Cloud payload indexes on a pre-existing collection
 │   ├── rate_limit.py             # Shared slowapi Limiter, keyed by real client IP (X-Forwarded-For aware)
 │   └── auth/
-│       ├── models.py            # User, AuditLog SQLAlchemy models
+│       ├── models.py            # User, AuditLog, DocumentJob, ChatSession, ChatMessage SQLAlchemy models
 │       ├── db.py                # Postgres engine (pool_pre_ping for Neon), migrations
 │       ├── router.py            # register/login/logout/forgot/reset/change-password
 │       ├── dependencies.py      # require_active_user, require_admin guards
@@ -173,7 +174,7 @@ ask-my-docs-rag/
 │   │   ├── chat.jsx             # Main chat/compare UI
 │   │   ├── App.jsx              # Auth-gated root
 │   │   ├── components/          # Auth, AdminPanel, FileChip, ResetPasswordModal, icons
-│   │   └── utils/                # api.js (API_BASE_URL), storage.js
+│   │   └── utils/                # api.js (API_BASE_URL), sessionsApi.js (chat session/message CRUD), storage.js (pending-upload-job tracking only)
 │   ├── vercel.json               # Rewrites /api/* to the Azure backend (same-origin proxy)
 │   └── Dockerfile               # Multi-stage Vite build -> nginx
 ├── deploy/azure/
@@ -299,7 +300,7 @@ The live app runs across four separate managed services rather than a single hos
 |---|---|---|
 | Frontend | Vercel | Auto-deployed from `main` via Vercel's GitHub integration |
 | Backend | Azure Container Apps | `min-replicas=0` to conserve free/student credit — first request after idle is a cold start |
-| Relational DB | Neon (serverless Postgres) | `users`, `audit_logs` |
+| Relational DB | Neon (serverless Postgres) | `users`, `audit_logs`, `document_jobs`, `chat_sessions`, `chat_messages` |
 | Vector DB | Qdrant Cloud | `pdf_knowledge_base` collection |
 
 **Same-origin cookie auth across two domains.** The frontend (`clauseiq-rag.vercel.app`) and backend (an Azure Container Apps FQDN) are on different domains, which normally forces the auth cookie to be `SameSite=None; Secure` — and strict cross-site tracking protections (Brave Shields, Safari ITP, Firefox strict mode) block `SameSite=None` cookies outright, regardless of `Secure`. Instead of switching to a token-in-header scheme, `Frontend/vercel.json` proxies `/api/*` through to the Azure backend, so the browser sees every API call as same-origin — letting the cookie use `SameSite=Lax`, which those browsers don't block. Vercel's external rewrite is a genuine reverse-proxy pass-through (not the older, buffered Vercel Functions streaming model), but it does impose a hard **120-second timeout** on any single proxied request — worth knowing if you extend `/compare/` to cover many large documents at once.
