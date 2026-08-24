@@ -17,8 +17,9 @@ from groq import Groq, RateLimitError
 load_dotenv()
 
 llm = ChatGroq(
-    model="llama-3.1-8b-instant",
+    model="openai/gpt-oss-20b",
     temperature=0,
+    reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY")
 )
 
@@ -243,9 +244,10 @@ def _extract_claims(answer: str) -> list[str]:
     for attempt in range(_MAX_RETRIES):
         try:
             result = _verifier.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="openai/gpt-oss-20b",
                 temperature=0,
                 max_tokens=512,
+                reasoning_effort="low",
                 max_retries=1,
                 response_model=_ExtractedClaims,
                 messages=[
@@ -278,9 +280,10 @@ def _verify_claims(claims: list[str], context: str) -> list[VerifiedClaim]:
     for attempt in range(_MAX_RETRIES):
         try:
             result = _verifier.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="openai/gpt-oss-20b",
                 temperature=0,
                 max_tokens=1024,
+                reasoning_effort="low",
                 max_retries=1,
                 response_model=_VerifiedClaimsList,
                 messages=[

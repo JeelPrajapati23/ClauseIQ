@@ -84,7 +84,7 @@ flowchart TB
     end
 
     subgraph External["External APIs"]
-        Groq["Groq — llama-3.1-8b-instant<br/>(generation + claim verification)"]
+        Groq["Groq — openai/gpt-oss-20b<br/>(generation + claim verification)"]
         CohereAPI["Cohere — reranking"]
         BGE["BAAI/bge-base-en-v1.5<br/>(local embeddings, CPU)"]
     end
@@ -128,7 +128,7 @@ flowchart TB
 | Layer | Technology |
 |---|---|
 | Backend framework | FastAPI, Uvicorn |
-| LLM generation | Groq (`llama-3.1-8b-instant`), streamed via SSE |
+| LLM generation | Groq (`openai/gpt-oss-20b`), streamed via SSE |
 | Structured extraction | `instructor`-patched Groq client (claim extraction/verification) |
 | Vector database | Qdrant |
 | Reranking | Cohere `rerank-english-v3.0` |

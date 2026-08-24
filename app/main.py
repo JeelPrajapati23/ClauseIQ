@@ -18,8 +18,8 @@ MAX_UPLOAD_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_PAGES = 150
 
-# The system prompt asks the LLM for one exact refusal string, but llama-3.1-8b-instant
-# often paraphrases it instead of reproducing it verbatim — match on the paraphrases too
+# The system prompt asks the LLM for one exact refusal string, but small/fast Groq models
+# often paraphrase it instead of reproducing it verbatim — match on the paraphrases too
 # so sources still get wiped for a genuine refusal.
 _REFUSAL_MARKERS = (
     "therefore an answer cannot be generated",
