@@ -56,6 +56,11 @@ SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASS="${SMTP_PASS:-}"
 FROM_EMAIL="${FROM_EMAIL:-noreply@clauseiq.local}"
+# Optional — LangSmith tracing. Leave LANGCHAIN_TRACING_V2 unset in
+# .env.azure to keep tracing off (see app/generator.py's silently-off fallback).
+LANGCHAIN_TRACING_V2="${LANGCHAIN_TRACING_V2:-}"
+LANGCHAIN_API_KEY="${LANGCHAIN_API_KEY:-}"
+LANGCHAIN_PROJECT="${LANGCHAIN_PROJECT:-clauseiq-rag}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 az extension add --name containerapp --upgrade -y
@@ -108,6 +113,7 @@ az containerapp create \
     qdrant-api-key="$QDRANT_API_KEY" \
     smtp-user="$SMTP_USER" \
     smtp-pass="$SMTP_PASS" \
+    langchain-api-key="$LANGCHAIN_API_KEY" \
   --env-vars \
     ENVIRONMENT=production \
     RAG_SYSTEM_PROMPT_FILE="$RAG_SYSTEM_PROMPT_FILE" \
@@ -117,6 +123,8 @@ az containerapp create \
     SMTP_HOST="$SMTP_HOST" \
     SMTP_PORT="$SMTP_PORT" \
     FROM_EMAIL="$FROM_EMAIL" \
+    LANGCHAIN_TRACING_V2="$LANGCHAIN_TRACING_V2" \
+    LANGCHAIN_PROJECT="$LANGCHAIN_PROJECT" \
     GROQ_API_KEY=secretref:groq-api-key \
     COHERE_API_KEY=secretref:cohere-api-key \
     JWT_SECRET_KEY=secretref:jwt-secret-key \
@@ -124,6 +132,7 @@ az containerapp create \
     QDRANT_API_KEY=secretref:qdrant-api-key \
     SMTP_USER=secretref:smtp-user \
     SMTP_PASS=secretref:smtp-pass \
+    LANGCHAIN_API_KEY=secretref:langchain-api-key \
   --output none
 
 FQDN="$(az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
