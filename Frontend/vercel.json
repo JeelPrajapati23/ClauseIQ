@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://clauseiq-backend.victoriousmoss-e237b359.centralindia.azurecontainerapps.io/:path*"
+      "destination": "https://clauseiq-backend-q90j.onrender.com/:path*"
     }
   ],
   "headers": [
