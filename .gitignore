@@ -9,6 +9,8 @@ __pycache__/
 # Environment variables & API keys
 .env
 deploy/azure/.env.azure
+deploy/gcp/.env.gcp
+deploy/gcp/*-key.json
 
 # Ignore uploaded test files
 app/test_pdfs/
@@ -32,3 +34,4 @@ Evaluation/CUAD_v1.json
 
 # Claude Code project instructions (local AI-assistant context, not part of the app)
 CLAUDE.md
+.aider*

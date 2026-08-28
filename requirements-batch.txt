@@ -1,0 +1,17 @@
+# Extra deps needed only by app/batch_index.py, which embeds locally (optionally
+# on GPU) for large one-off corpus loads — NOT installed in the deployed API
+# image, which embeds via the HF Inference API instead (see app/database.py).
+#
+# Usage: pip install -r requirements.txt -r requirements-batch.txt
+-r requirements.txt
+torch==2.12.0
+transformers==5.10.2
+sentence-transformers==5.5.1
+safetensors==0.7.0
+scikit-learn==1.9.0
+scipy==1.17.1
+sympy==1.14.0
+networkx==3.6.1
+mpmath==1.3.0
+joblib==1.5.3
+threadpoolctl==3.6.0

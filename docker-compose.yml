@@ -40,6 +40,7 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       GROQ_API_KEY: ${GROQ_API_KEY}
       COHERE_API_KEY: ${COHERE_API_KEY}
+      HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
       RAG_SYSTEM_PROMPT_FILE: ${RAG_SYSTEM_PROMPT_FILE:-system_prompt_v3.txt}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set — see .env}
       APP_URL: ${APP_URL:-http://localhost:8000}

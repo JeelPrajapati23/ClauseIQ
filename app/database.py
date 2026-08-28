@@ -2,7 +2,7 @@ import os
 from typing import Any, List
 from langchain_cohere import CohereRerank
 from langchain_qdrant import QdrantVectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchAny, MatchValue, PointIdsList, PayloadSchemaType
 from langchain_core.documents import Document
@@ -12,10 +12,15 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 from pydantic import ConfigDict
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-base-en-v1.5",
-    model_kwargs={"device": "cpu"},
-    encode_kwargs={"normalize_embeddings": True},
+# Same model/weights as before, just called over HF's hosted Inference API instead
+# of loaded in-process — keeps the vector space identical (no Qdrant reindex needed)
+# while dropping torch/transformers/sentence-transformers from this service's runtime.
+# Requires HUGGINGFACEHUB_API_TOKEN. normalize=True matches the previous
+# normalize_embeddings=True so existing indexed vectors stay comparable.
+embeddings = HuggingFaceEndpointEmbeddings(
+    model="BAAI/bge-base-en-v1.5",
+    task="feature-extraction",
+    model_kwargs={"normalize": True},
 )
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")

@@ -1,0 +1,72 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# One-time setup: push this file to main, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at this repo. Render reads this file and
+# provisions the service below. After the first deploy, every push to main
+# that Render's GitHub integration sees redeploys automatically — no GitHub
+# Actions workflow needed (see .github/workflows/ — the old GCP Cloud Run
+# workflow was removed when this became the deploy target).
+#
+# Secrets (marked `sync: false` below) are NOT stored here — set their real
+# values once in the Render dashboard after the first deploy (Environment tab
+# on the clauseiq-backend service). They are never overwritten by later
+# blueprint syncs.
+services:
+  - type: web
+    name: clauseiq-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore   # closest free-tier region to India; change to match wherever your Qdrant Cloud/Neon instances are for lowest internal latency
+    healthCheckPath: /docs
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: RAG_SYSTEM_PROMPT_FILE
+        value: system_prompt_v3.txt
+      - key: GROQ_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      # BAAI/bge-base-en-v1.5 embedding calls go through HF's hosted Inference
+      # API (app/database.py) instead of loading the model in-process — this
+      # is what makes the 512MB free-tier RAM ceiling workable at all.
+      - key: HUGGINGFACEHUB_API_TOKEN
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false   # Neon connection string
+      - key: QDRANT_URL
+        sync: false   # Qdrant Cloud cluster URL
+      - key: QDRANT_API_KEY
+        sync: false
+      # Set to this service's own onrender.com URL after the first deploy —
+      # only used to build links (e.g. password-reset emails), not for
+      # routing, so it doesn't need to exist before the first deploy.
+      - key: APP_URL
+        sync: false
+      - key: APP_FRONTEND_URL
+        sync: false   # your Vercel URL, e.g. https://clauseiq-rag.vercel.app
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false   # comma-separated allowlist, must include APP_FRONTEND_URL
+      # Optional — leave unset in the dashboard and password-reset links are
+      # printed to the Render service's logs instead of emailed.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: FROM_EMAIL
+        value: noreply@clauseiq.local
+      # Optional — LangSmith tracing, silently off if left unset.
+      - key: LANGCHAIN_TRACING_V2
+        sync: false
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_PROJECT
+        value: clauseiq-rag
