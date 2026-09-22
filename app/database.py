@@ -1,8 +1,14 @@
 import os
+import re
 from typing import Any, List
+from dotenv import load_dotenv
 from langchain_cohere import CohereRerank
 from langchain_qdrant import QdrantVectorStore
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
+
+# Self-contained rather than relying on import order, so the embeddings client
+# below always has its API token regardless of which module imports this first.
+load_dotenv()
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchAny, MatchValue, PointIdsList, PayloadSchemaType
 from langchain_core.documents import Document
@@ -12,13 +18,19 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 from pydantic import ConfigDict
 
-# Same model/weights as before, just called over HF's hosted Inference API instead
-# of loaded in-process — keeps the vector space identical (no Qdrant reindex needed)
-# while dropping torch/transformers/sentence-transformers from this service's runtime.
-# Requires HUGGINGFACEHUB_API_TOKEN. normalize=True matches the previous
-# normalize_embeddings=True so existing indexed vectors stay comparable.
-embeddings = HuggingFaceEndpointEmbeddings(
-    model="BAAI/bge-base-en-v1.5",
+# Served via HF's Inference Providers router using HUGGINGFACEHUB_API_TOKEN.
+# This model is asymmetric: queries need a "query: " prefix, documents are
+# embedded plain (per the model card), so embed_query is overridden below.
+class _ArcticLegalEmbeddings(HuggingFaceEndpointEmbeddings):
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([f"query: {text}"])[0]
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return (await self.aembed_documents([f"query: {text}"]))[0]
+
+
+embeddings = _ArcticLegalEmbeddings(
+    model="Snowflake/snowflake-arctic-embed-l-v2.0",
     task="feature-extraction",
     model_kwargs={"normalize": True},
 )
@@ -49,6 +61,33 @@ def ensure_payload_indexes(client: QdrantClient, collection_name: str) -> None:
             )
         except Exception:
             pass
+
+
+# rank_bm25's Okapi scoring stays as-is; only the tokenization feeding it changes.
+# The library default (BM25Retriever's default_preprocessing_func) is a bare
+# text.split() — no lowercasing, no punctuation handling — so "Section" vs "section"
+# mismatch, and "3.1(b)." becomes one indivisible token fused to its own punctuation.
+_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "at", "for",
+    "is", "are", "was", "were", "be", "been", "being", "this", "that", "these",
+    "those", "it", "its", "as", "by", "with", "from", "such", "which", "who",
+    "whom", "if", "then", "than", "so", "into", "onto", "upon", "under", "over",
+    "between", "within", "any", "all", "each", "other",
+})
+# Deliberately NOT stopworded: shall/may/must/will/not/no — these carry real legal
+# meaning (obligation vs. permission, negation), unlike generic function words above.
+_BM25_TOKEN_RE = re.compile(r"[a-z0-9]+(?:[.'\-][a-z0-9]+)*")
+
+
+def bm25_preprocess(text: str) -> list[str]:
+    """Lowercase and tokenize on word boundaries, keeping section references like
+    '3.1' and hyphenated/possessive terms like 'co-branding'/'lessee's' as single
+    tokens instead of losing them to naive whitespace splitting, then drop
+    low-signal function-word stopwords. Applied identically to both indexed
+    documents and queries (BM25Retriever calls this same function on each).
+    """
+    tokens = _BM25_TOKEN_RE.findall(text.lower())
+    return [t for t in tokens if t not in _STOPWORDS]
 
 
 # Per-user BM25 cache: user_id -> {retriever, version, collection, k, filter}
@@ -84,7 +123,7 @@ def _build_bm25_retriever(collection_name: str, k: int, doc_filter: tuple, user_
             docs = [d for d in docs if d.metadata.get("source_file", "") in doc_filter]
         if not docs:
             return None
-        retriever = BM25Retriever.from_documents(docs)
+        retriever = BM25Retriever.from_documents(docs, preprocess_func=bm25_preprocess)
         retriever.k = k
         return retriever
     except Exception:
@@ -143,9 +182,8 @@ def save_chunks_to_vector_db(chunks, user_id: str, collection_name="pdf_knowledg
         chunk.metadata["user_id"] = user_id
 
     client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-    # Must run before the delete-by-filter below, not just after from_documents() —
-    # on a collection that predates this index (e.g. an existing prod collection until
-    # the one-off backfill below has run), the delete filter needs it too.
+    # Must run before the delete-by-filter below too, in case the collection
+    # predates these payload indexes.
     ensure_payload_indexes(client, collection_name)
     source_files = {c.metadata.get("source_file") for c in chunks if c.metadata.get("source_file")}
     for sf in source_files:
@@ -167,8 +205,8 @@ def save_chunks_to_vector_db(chunks, user_id: str, collection_name="pdf_knowledg
         force_recreate=False,
         check_compatibility=False,
     )
-    # Also re-run after from_documents(): on a first-ever upload the collection didn't
-    # exist for the call above, so this is what actually creates the index for it.
+    # Re-run after from_documents() too, since a first-ever upload creates the
+    # collection here rather than it existing for the call above.
     ensure_payload_indexes(client, collection_name)
     invalidate_bm25_cache()
 
@@ -195,6 +233,40 @@ def swap_to_parent_context(child_docs: list) -> list:
         if page is not None and page not in parents[key].metadata["all_pages"]:
             parents[key].metadata["all_pages"].append(page)
     return list(parents.values()) + legacy
+
+
+def get_full_document_context(
+    user_id: str, source_file: str, collection_name: str = "pdf_knowledge_base"
+) -> list:
+    """Returns every unique parent chunk for one document, bypassing retrieval entirely.
+
+    Used for clause-category questions ("does this have a non-compete clause?"),
+    where the category name and the clause's actual wording can share little
+    vocabulary — handing the LLM the whole document sidesteps relevance ranking
+    instead of relying on it to find the right chunk.
+
+    Scoped to a single already-uploaded document, not a multi-doc or unscoped
+    search — see the caller for how document_filter is checked before this path
+    is used.
+    """
+    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    doc_filter = Filter(must=[
+        FieldCondition(key="metadata.user_id", match=MatchValue(value=user_id)),
+        FieldCondition(key="metadata.source_file", match=MatchValue(value=source_file)),
+    ])
+    records, _ = client.scroll(
+        collection_name=collection_name,
+        scroll_filter=doc_filter,
+        limit=2000,
+        with_payload=True,
+    )
+    if not records:
+        return []
+    child_docs = [
+        Document(page_content=r.payload.get("page_content", ""), metadata=r.payload.get("metadata", {}))
+        for r in records
+    ]
+    return swap_to_parent_context(child_docs)
 
 
 def attribute_answer_to_parents(answer: str, parent_docs: list, threshold: float = 0.3) -> list:
@@ -250,9 +322,8 @@ def query_vector_db(query: str, k: int = 4, collection_name: str = "pdf_knowledg
 class ThresholdReranker(BaseRetriever):
     """Hybrid retriever: Qdrant vector + BM25 fused via RRF, then Cohere cross-encoder reranked.
 
-    Cohere's raw relevance scores for long legal-document/instructional-query pairs sit in a
-    noise floor (~0.0001-0.05) that overlaps between genuinely relevant and irrelevant documents,
-    so no absolute score cutoff can separate them reliably. Out-of-scope questions are instead
+    Cohere's relevance scores don't separate relevant from irrelevant documents
+    reliably enough for an absolute cutoff, so out-of-scope questions are instead
     caught downstream by the LLM's own refusal string (see main.py's guardrail check).
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -299,6 +370,8 @@ def get_reranking_retriever(
     bm25_retriever = _get_cached_bm25_retriever(collection_name, initial_k, doc_filter, user_id)
 
     if bm25_retriever is not None:
+        # Fusion weights barely matter here: Cohere reranking below re-scores the
+        # full candidate pool from scratch, regardless of fusion order.
         ensemble_retriever = EnsembleRetriever(
             retrievers=[vector_retriever, bm25_retriever],
             weights=[0.5, 0.5],

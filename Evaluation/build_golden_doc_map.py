@@ -38,7 +38,9 @@ def normalize(text: str) -> str:
 
 def load_pdf_texts() -> dict[str, str]:
     texts = {}
-    pdf_files = sorted(PDF_DIR.glob("*.pdf"))
+    # Case-insensitive: Linux (WSL2's /mnt/c included) treats *.pdf and *.PDF as
+    # different globs even on a case-preserving Windows-backed filesystem.
+    pdf_files = sorted(p for p in PDF_DIR.iterdir() if p.is_file() and p.suffix.lower() == ".pdf")
     for idx, pdf_path in enumerate(pdf_files, start=1):
         print(f"[{idx}/{len(pdf_files)}] Extracting: {pdf_path.name}")
         pages = extract_pages_from_pdf(str(pdf_path))
@@ -75,6 +77,53 @@ def find_matches_by_paragraph(raw_context: str, pdf_texts: dict[str, str]) -> li
     return [name for name, v in votes.items() if v == best]
 
 
+_WORD_RE = re.compile(r"[a-z]{4,}")
+
+
+def find_matches_fuzzy(snippet: str, pdf_texts: dict[str, str]) -> list[str]:
+    """Last-resort fallback for HAND_WRITTEN snippets that were retyped/reformatted
+    rather than copy-pasted, so no exact substring (contiguous or per-paragraph)
+    appears anywhere in the extracted PDF text.
+
+    Scores each PDF by IDF-weighted overlap of the snippet's words against that PDF's
+    vocabulary: words that appear in most/all of the corpus (generic contract
+    boilerplate — "agreement", "shall", "party") carry no signal, while words rare
+    across the corpus (party names, defined terms, deal-specific language) are
+    strongly diagnostic of the source document even when the surrounding wording
+    was reworded. Requires both a minimum score and a clear margin over the
+    runner-up, so an ambiguous case is left unmatched rather than silently guessed.
+    """
+    snippet_words = set(_WORD_RE.findall(snippet.lower()))
+    if not snippet_words:
+        return []
+
+    pdf_word_sets = {name: set(_WORD_RE.findall(text)) for name, text in pdf_texts.items()}
+
+    doc_freq: dict[str, int] = {}
+    for w in snippet_words:
+        doc_freq[w] = sum(1 for words in pdf_word_sets.values() if w in words)
+
+    n_docs = len(pdf_texts)
+    common_cutoff = max(2, n_docs // 2)
+    scores = {
+        name: sum(
+            1.0 / doc_freq[w]
+            for w in snippet_words & words
+            if doc_freq[w] < common_cutoff
+        )
+        for name, words in pdf_word_sets.items()
+    }
+
+    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    if not ranked or ranked[0][1] == 0:
+        return []
+    best_name, best_score = ranked[0]
+    second_score = ranked[1][1] if len(ranked) > 1 else 0.0
+    if best_score < 3 or best_score < second_score * 1.5:
+        return []
+    return [best_name]
+
+
 def main() -> None:
     with open(GOLDEN_SET_FILE, "r", encoding="utf-8") as f:
         golden = json.load(f)
@@ -95,11 +144,15 @@ def main() -> None:
 
         snippet = normalize(contexts[0])
         matches = find_matches(snippet, pdf_texts)
+        match_reason = "matched"
         if not matches:
             matches = find_matches_by_paragraph(contexts[0], pdf_texts)
+        if not matches:
+            matches = find_matches_fuzzy(snippet, pdf_texts)
+            match_reason = "matched_fuzzy"
 
         if len(matches) == 1:
-            mapping[str(source_row)] = {"source_file": matches[0], "reason": "matched"}
+            mapping[str(source_row)] = {"source_file": matches[0], "reason": match_reason}
         elif len(matches) > 1:
             mapping[str(source_row)] = {"source_file": matches[0], "reason": f"ambiguous:{matches}"}
             ambiguous += 1

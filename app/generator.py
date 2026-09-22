@@ -16,6 +16,9 @@ from groq import Groq, RateLimitError
 
 load_dotenv()
 
+# Generation model. The internal claim verifier (_verifier below) and the Ragas
+# judge intentionally stay on a different model than whatever wins this slot, so
+# neither self-grades its own generations.
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0,
@@ -91,11 +94,9 @@ def is_off_topic_request(question: str) -> bool:
     return any(kw in q_lower for kw in _OFF_TOPIC_KEYWORDS)
 
 
-# The keyword gate above only catches phrasings we thought to enumerate — it missed
-# open-domain questions (weather, sports, general trivia phrased without a keyword,
-# small talk) that testers asked in practice and got real answers to. This LLM gate is
-# the backstop: one fast classification call, before any retrieval, so an off-topic
-# question never reaches the document-QA prompt at all regardless of phrasing.
+# Backstop for the keyword gate above, which can't enumerate every off-topic
+# phrasing: one fast classification call, before any retrieval, so an off-topic
+# question never reaches the document-QA prompt regardless of phrasing.
 _OFF_TOPIC_CLASSIFIER_PROMPT = """You are a strict binary classifier guarding a legal-document Q&A assistant.
 
 The assistant may ONLY answer questions that could plausibly be answered by looking inside a user-uploaded legal document (contracts, agreements, clauses, parties, obligations, dates, payment terms, termination conditions, definitions, etc.), including meta-questions about the conversation itself (e.g. "what did I just ask", "summarize this chat").
@@ -140,6 +141,12 @@ _verifier = instructor.from_groq(
     mode=instructor.Mode.JSON,
 )
 
+# Mirrors RAG_SYSTEM_PROMPT_FILE's override pattern so a candidate FACT prompt (e.g.
+# system_prompt_v4.txt) can be paired with a matching candidate analytical prompt
+# (e.g. system_prompt_analytical_v2.txt) during A/B testing, without the analytical
+# routing in stream_answer() silently staying pinned to the old file.
+_ANALYTICAL_PROMPT_FILE = os.getenv("RAG_ANALYTICAL_PROMPT_FILE", "system_prompt_analytical.txt")
+
 _prompt_cache: dict = {}
 
 def load_prompt(filename=None):
@@ -180,6 +187,35 @@ def rephrase_question(question: str, history: list) -> str:
     return result.content.strip()
 
 
+# Retrieval struggles when a question names an abstract legal-clause category (e.g.
+# "non-compete") but the actual clause text uses unrelated concrete wording. This gate
+# detects that pattern and routes to reading the whole document instead of relying on
+# retrieval to find the right chunk (see database.get_full_document_context).
+_CLAUSE_CATEGORY_RE = re.compile(
+    r"related to [\"']?[\w\s\-/]+[\"']?\s*(that should be reviewed|clause)", re.IGNORECASE
+)
+_CLAUSE_CATEGORY_KEYWORDS = {
+    "non-compete", "non compete", "change of control", "governing law",
+    "cap on liability", "limitation of liability", "uncapped liability",
+    "audit rights", "termination for convenience", "indemnification",
+    "indemnity", "confidentiality clause", "exclusivity", "assignment clause",
+    "warranty", "insurance requirement", "ip ownership",
+    "intellectual property ownership", "most favored nation",
+    "non-solicitation", "non solicitation", "source code escrow",
+    "renewal term", "revenue sharing", "minimum commitment",
+}
+
+
+def needs_full_document_read(question: str) -> bool:
+    """Returns True if the question names a legal-clause category by its generic name
+    rather than describing the clause's actual content — the pattern that hits the
+    retrieval vocabulary gap between question and contract wording (see comment above).
+    Only meaningful when scoped to a single document — see the caller."""
+    q_lower = question.lower()
+    if _CLAUSE_CATEGORY_RE.search(q_lower):
+        return True
+    return any(kw in q_lower for kw in _CLAUSE_CATEGORY_KEYWORDS)
+
 
 def stream_answer(question: str, formatted_context: str, history: list = None, intent: QueryIntent = QueryIntent.FACT):
     """Yields answer text chunks for SSE streaming, with optional conversation history.
@@ -187,7 +223,7 @@ def stream_answer(question: str, formatted_context: str, history: list = None, i
     Routes to the analytical system prompt (more coverage, structured output) for ANALYTICAL intent.
     Temperature stays at 0 in both modes to preserve legal accuracy.
     """
-    prompt_file = "system_prompt_analytical.txt" if intent == QueryIntent.ANALYTICAL else None
+    prompt_file = _ANALYTICAL_PROMPT_FILE if intent == QueryIntent.ANALYTICAL else None
     system_prompt = load_prompt(prompt_file)
     # Fill {context} directly to avoid template-parsing conflicts with legal text in history
     filled_system = system_prompt.replace("{context}", formatted_context)

@@ -17,9 +17,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: clauseiq
     # Host port 5433, not Postgres's usual 5432 — avoids clashing with a native
-    # Postgres install some dev machines already run (this one included).
-    # Doesn't affect backend<->postgres traffic, which stays on the internal
-    # Docker network at the standard port 5432 regardless.
+    # Postgres install some dev machines already run. Doesn't affect
+    # backend<->postgres traffic, which stays on the internal Docker network
+    # at the standard port 5432 regardless.
     ports:
       - "5433:5432"
     volumes:

@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 MAX_UPLOAD_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_PAGES = 150
+# Safety cap for the full-document-read path (needs_full_document_read) — documents
+# larger than this fall back to normal retrieval instead.
+MAX_FULL_DOC_CHARS = 20000
 
 # The system prompt asks the LLM for one exact refusal string, but small/fast Groq models
 # often paraphrase it instead of reproducing it verbatim — match on the paraphrases too
@@ -29,9 +32,9 @@ _REFUSAL_MARKERS = (
 )
 
 from app.loader import process_pdf
-from app.database import save_chunks_to_vector_db, get_reranking_retriever, delete_user_document, attribute_answer_to_parents, QDRANT_URL, QDRANT_API_KEY
+from app.database import save_chunks_to_vector_db, get_reranking_retriever, get_full_document_context, delete_user_document, attribute_answer_to_parents, QDRANT_URL, QDRANT_API_KEY
 from pydantic import BaseModel, Field, field_validator
-from app.generator import stream_answer, verify_answer_claims, rephrase_question, needs_rephrasing, classify_intent, is_off_topic_request, is_off_topic_llm, QueryIntent
+from app.generator import stream_answer, verify_answer_claims, rephrase_question, needs_rephrasing, needs_full_document_read, classify_intent, is_off_topic_request, is_off_topic_llm, QueryIntent
 from groq import RateLimitError
 from app.compare import retrieve_per_doc, stream_comparison
 
@@ -423,19 +426,35 @@ async def ask_question(
                 return
 
             intent = classify_intent(body.question)
-            retriever = get_reranking_retriever(
-                user_id=current_user.id,
-                document_filter=body.document_filter or None,
-                initial_k=20 if intent == QueryIntent.ANALYTICAL else 10,
-                final_k=5 if intent == QueryIntent.ANALYTICAL else 3,
-            )
             # Step 1 — resolve pronoun/reference ambiguity using conversation history
             retrieval_query = (
                 rephrase_question(body.question, body.history)
                 if body.history and needs_rephrasing(body.question)
                 else body.question
             )
-            retrieved_docs = retriever.invoke(retrieval_query)
+            # Step 2 — clause-category questions ("does this have a non-compete
+            # clause?") bypass retrieval entirely in favor of reading the whole
+            # document — see generator.needs_full_document_read's docstring. Only
+            # when scoped to exactly one document; a multi-doc or unscoped search
+            # falls back to normal retrieval. MAX_FULL_DOC_CHARS caps how large a
+            # document this path will read before falling back to retrieval instead.
+            full_doc_docs = (
+                get_full_document_context(user_id=current_user.id, source_file=body.document_filter[0])
+                if needs_full_document_read(retrieval_query) and len(body.document_filter) == 1
+                else None
+            )
+            if full_doc_docs and sum(len(d.page_content) for d in full_doc_docs) <= MAX_FULL_DOC_CHARS:
+                retrieved_docs = full_doc_docs
+            else:
+                retriever = get_reranking_retriever(
+                    user_id=current_user.id,
+                    document_filter=body.document_filter or None,
+                    # initial_k/final_k tuned against the golden eval set — see
+                    # Evaluation/sweep_retrieval_params.py.
+                    initial_k=20,
+                    final_k=5 if intent == QueryIntent.ANALYTICAL else 6,
+                )
+                retrieved_docs = retriever.invoke(retrieval_query)
 
             if not retrieved_docs:
                 canned = "I cannot answer this based on the provided documents. No relevant context was found."

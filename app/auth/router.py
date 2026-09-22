@@ -20,17 +20,12 @@ COOKIE_MAX_AGE = 8 * 3600
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
-# The frontend proxies API calls through a Vercel rewrite (Frontend/vercel.json)
-# to this backend, so from the browser's perspective every request is same-site —
-# Lax is sufficient and safer than None (a cookie SameSite=None cookie is sent on
-# *any* cross-site request; Lax confines it to top-level navigations and same-site
-# fetches). None is only required if something calls this API directly from a
-# different origin, bypassing the Vercel proxy — in that case revert to
-# `"none" if ENVIRONMENT == "production" else "lax"` and accept that SameSite=None
-# cookies are blocked outright by strict tracking-protection browsers (Brave
-# Shields, Safari ITP, Firefox strict mode), which was the original bug this
-# proxy setup fixes. Secure is still required in production (cookie only sent
-# over HTTPS); locally the frontend/backend share "localhost" over plain HTTP.
+# The frontend proxies API calls through to this backend (see Frontend/vercel.json),
+# so from the browser's perspective every request is same-site — Lax is sufficient
+# and safer than None. Only switch to None if something calls this API directly
+# from a different origin, bypassing that proxy. Secure is still required in
+# production (cookie only sent over HTTPS); locally frontend/backend share
+# "localhost" over plain HTTP.
 COOKIE_SAMESITE = "lax"
 COOKIE_SECURE = ENVIRONMENT == "production"
 

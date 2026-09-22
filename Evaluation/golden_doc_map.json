@@ -172,8 +172,8 @@
     "reason": "matched"
   },
   "43": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "CytodynInc_20200109_10-Q_EX-10.5_11941634_EX-10.5_License Agreement.pdf",
+    "reason": "matched_fuzzy"
   },
   "44": {
     "source_file": "DovaPharmaceuticalsInc_20181108_10-Q_EX-10.2_11414857_EX-10.2_Promotion Agreement.pdf",
@@ -196,8 +196,8 @@
     "reason": "matched"
   },
   "49": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "ENERGOUSCORP_03_16_2017-EX-10.24-STRATEGIC ALLIANCE AGREEMENT.PDF",
+    "reason": "matched_fuzzy"
   },
   "50": {
     "source_file": "FuelcellEnergyInc_20191106_8-K_EX-10.1_11868007_EX-10.1_Development Agreement.pdf",
@@ -208,32 +208,32 @@
     "reason": "matched"
   },
   "52": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "PfHospitalityGroupInc_20150923_10-12G_EX-10.1_9266710_EX-10.1_Franchise Agreement1.pdf",
+    "reason": "matched_fuzzy"
   },
   "53": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "PfHospitalityGroupInc_20150923_10-12G_EX-10.1_9266710_EX-10.1_Franchise Agreement1.pdf",
+    "reason": "matched_fuzzy"
   },
   "54": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "ENERGOUSCORP_03_16_2017-EX-10.24-STRATEGIC ALLIANCE AGREEMENT.PDF",
+    "reason": "matched_fuzzy"
   },
   "55": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "ENERGOUSCORP_03_16_2017-EX-10.24-STRATEGIC ALLIANCE AGREEMENT.PDF",
+    "reason": "matched_fuzzy"
   },
   "56": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "RaeSystemsInc_20001114_10-Q_EX-10.57_2631790_EX-10.57_Co-Branding Agreement.pdf",
+    "reason": "matched_fuzzy"
   },
   "57": {
     "source_file": null,
     "reason": "no_match"
   },
   "58": {
-    "source_file": null,
-    "reason": "no_match"
+    "source_file": "HarpoonTherapeuticsInc_20200312_10-K_EX-10.18_12051356_EX-10.18_Development Agreement_Option Agreement.pdf",
+    "reason": "matched_fuzzy"
   },
   "59": {
     "source_file": null,
@@ -262,5 +262,13 @@
   "65": {
     "source_file": null,
     "reason": "no_reference_contexts"
+  },
+  "66": {
+    "source_file": "KIROMICBIOPHARMA,INC_05_11_2020-EX-10.23-CONSULTING AGREEMENT.PDF",
+    "reason": "matched"
+  },
+  "67": {
+    "source_file": "ArconicRolledProductsCorp_20191217_10-12B_EX-2.7_11923804_EX-2.7_Trademark License Agreement.pdf",
+    "reason": "matched"
   }
 }

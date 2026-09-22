@@ -176,9 +176,9 @@ Next steps:
      ACR_NAME             = $ACR_NAME
      RESOURCE_GROUP       = $RESOURCE_GROUP
      CONTAINER_APP_NAME   = $APP_NAME
-3. min-replicas is 0 to conserve your Azure student credit — the first request
-   after idle will be slow (cold start: container boot + embedding model load).
-   Set --min-replicas 1 on the Container App if you'd rather keep it warm.
+3. min-replicas is 0 to conserve cost — the first request after idle will be
+   slow (cold start: container boot + embedding model load). Set
+   --min-replicas 1 on the Container App if you'd rather keep it warm.
 4. Do not raise --max-replicas above 1: app/database.py's BM25 cache is
    per-process in-memory, so a second replica would serve a stale cache.
 EOF

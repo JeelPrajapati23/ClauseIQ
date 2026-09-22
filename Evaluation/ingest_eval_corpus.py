@@ -21,6 +21,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from dotenv import load_dotenv
+
+# Unlike running through uvicorn (where main.py/generator.py load .env first), this
+# script is a standalone entry point — without this, HUGGINGFACEHUB_API_TOKEN (and
+# every other .env var app.database/app.loader rely on) is silently unset, and HF's
+# embeddings API rejects the unauthenticated request with a 401 that looks like a
+# bad/misscoped token but isn't.
+load_dotenv(PROJECT_ROOT / ".env")
+
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 
@@ -37,7 +46,11 @@ def index_eval_corpus() -> None:
         print(f"[ERROR] Directory not found: {PDF_DIR}")
         return
 
-    pdf_files = sorted(PDF_DIR.glob("*.pdf"))
+    # Case-insensitive: Linux (WSL2's /mnt/c included) treats *.pdf and *.PDF as
+    # different globs even on a case-preserving Windows-backed filesystem.
+    pdf_files = sorted(
+        p for p in PDF_DIR.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"
+    )
     if not pdf_files:
         print(f"[WARN] No PDF files found in {PDF_DIR}")
         return
