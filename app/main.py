@@ -36,6 +36,7 @@ from app.database import save_chunks_to_vector_db, get_reranking_retriever, get_
 from pydantic import BaseModel, Field, field_validator
 from app.generator import stream_answer, verify_answer_claims, rephrase_question, needs_rephrasing, needs_full_document_read, classify_intent, is_off_topic_request, is_off_topic_llm, QueryIntent
 from groq import RateLimitError
+from cohere.errors.too_many_requests_error import TooManyRequestsError
 from app.compare import retrieve_per_doc, stream_comparison
 
 from app.auth.db import init_db, get_db, SessionLocal
@@ -532,7 +533,7 @@ async def ask_question(
                         citations=sources_metadata, verification=verification_payload,
                     )
 
-        except RateLimitError:
+        except (RateLimitError, TooManyRequestsError):
             yield f"data: {json.dumps({'type': 'error', 'detail': 'The AI service is temporarily rate-limited. Please wait a few seconds and try again.'})}\n\n"
         except Exception:
             logger.exception("ask/ failed for user=%s", current_user.id)

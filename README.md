@@ -83,7 +83,8 @@ flowchart TB
     end
 
     subgraph External["External APIs"]
-        Groq["Groq — LLM generation<br/>+ claim verification"]
+        Gemini["Gemini 2.5 Flash — LLM generation<br/>(rotating multi-key)"]
+        Groq["Groq — claim<br/>verification only"]
         CohereAPI["Cohere — reranking"]
         Embed["Hugging Face — hosted<br/>embeddings API"]
     end
@@ -102,8 +103,8 @@ flowchart TB
     Hybrid --> Qdrant
     Hybrid --> Rerank --> CohereAPI
     Hybrid --> ParentSwap
-    ParentSwap --> Groq
-    Groq --> |"faithfulness check"| Groq
+    ParentSwap --> Gemini
+    Gemini --> |"faithfulness check"| Groq
 
     Auth --> Postgres
     Admin --> Postgres
@@ -116,7 +117,7 @@ flowchart TB
 2. If the question references prior turns ("it", "that", …), rephrase into a standalone query using conversation history.
 3. Hybrid retrieve (vector + BM25 → RRF) scoped to `user_id`, rerank with Cohere, swap children for parent context.
 4. If nothing relevant was retrieved → stream a canned refusal, skip the LLM entirely.
-5. Stream the answer token-by-token from Groq.
+5. Stream the answer token-by-token from Gemini 2.5 Flash (a rotating pool of free-tier API keys — see [Tech Stack](#tech-stack)).
 6. Attribute the answer back to source parents by embedding similarity (cosine ≥ 0.3).
 7. Run the two-call claim-level faithfulness audit and stream the verdict + sources.
 
@@ -127,8 +128,8 @@ flowchart TB
 | Layer | Technology |
 |---|---|
 | Backend framework | FastAPI, Uvicorn |
-| LLM generation | Groq, streamed via SSE |
-| Structured extraction | `instructor`-patched Groq client (claim extraction/verification) |
+| LLM generation | Gemini 2.5 Flash, streamed via SSE, behind a rotating multi-key client (`app/gemini_client.py`) to pool free-tier daily quotas — prototype-scale traffic only, not a substitute for a paid tier |
+| Structured extraction | `instructor`-patched Groq client (claim extraction/verification — deliberately a different model than generation, so it never self-grades) |
 | Vector database | Qdrant |
 | Reranking | Cohere `rerank-english-v3.0` |
 | Embeddings | `Snowflake/snowflake-arctic-embed-l-v2.0`, served via Hugging Face's hosted Inference API |
@@ -155,7 +156,8 @@ ask-my-docs-rag/
 │   ├── pdf_parser.py           # PyMuPDF extraction, two-column detection, reading-order sort
 │   ├── loader.py               # Parent-child chunking (2000/0 parents, 350/50 children)
 │   ├── database.py             # Qdrant client, BM25 cache, hybrid retriever, reranker, attribution
-│   ├── generator.py            # Groq streaming, intent classification, faithfulness verification
+│   ├── generator.py            # Gemini streaming, intent classification, faithfulness verification
+│   ├── gemini_client.py        # Rotating multi-key Gemini client (production generation model)
 │   ├── compare.py               # Multi-document MMR retrieval + comparison prompt + SSE
 │   ├── batch_index.py           # Standalone bulk-indexer for ingestion-docs/ (full collection wipe)
 │   ├── create_qdrant_indexes.py # One-off backfill: Qdrant Cloud payload indexes on a pre-existing collection
@@ -198,14 +200,17 @@ ask-my-docs-rag/
 - Python 3.11+
 - Node.js 18+ (for the frontend)
 - Docker (for Qdrant/Postgres, or the whole stack)
-- API keys: [Groq](https://console.groq.com/), [Cohere](https://dashboard.cohere.com/), [Hugging Face](https://huggingface.co/settings/tokens)
+- API keys: [Google AI Studio](https://aistudio.google.com/apikey) (generation), [Groq](https://console.groq.com/) (claim verification), [Cohere](https://dashboard.cohere.com/), [Hugging Face](https://huggingface.co/settings/tokens)
 
 ### Environment Variables
 
 Create a `.env` file in the project root:
 
 ```bash
-GROQ_API_KEY=...
+GEMINI_API_KEY=...                            # generation model. Comma-separated for multiple keys/projects —
+                                               # Google AI Studio's free tier caps each project at 20 requests/day,
+                                               # so app/gemini_client.py rotates across keys instead of failing
+GROQ_API_KEY=...                              # used for claim verification (app/generator.py's _verifier) and the eval judge, not generation
 COHERE_API_KEY=...
 HUGGINGFACEHUB_API_TOKEN=...                  # embeddings, via HF's hosted Inference API
 RAG_SYSTEM_PROMPT_FILE=system_prompt_v3.txt   # optional, defaults to v3
@@ -311,27 +316,27 @@ The live app runs across four separate managed services rather than a single hos
 
 The eval harness runs the **actual production pipeline** (same retriever/generator code as the live API) against a golden question set derived from [CUAD](https://www.atticusprojectai.org/cuad) (real-world commercial legal contracts), scored offline via Ragas with a separate Groq-hosted judge model — the judge never grades its own generations.
 
-**Overall (68 questions):**
+**Overall (68 questions), current production model (Gemini 2.5 Flash):**
 
 | Metric | Score |
 |---|---|
-| Faithfulness | 0.68 |
+| Faithfulness | 0.89 |
 | Answer Relevancy | 0.69 |
-| Context Precision | 0.59 |
-| Context Recall | 0.69 |
+| Context Precision | 0.66 |
+| Context Recall | 0.83 |
 
 **By question type (faithfulness):**
 
 | Intent | n | Faithfulness |
 |---|---|---|
-| Factual | 44 | 0.57 |
-| Analytical | 18 | 0.84 |
+| Factual | 44 | 0.85 |
+| Analytical | 18 | 0.97 |
 | Out-of-scope (guardrail) | 6 | 1.00 |
 
 **Notes:**
 - All out-of-scope questions correctly triggered the refusal guardrail (faithfulness 1.0 by policy — a refusal cannot be unfaithful).
-- Factual questions score lower on faithfulness than analytical ones. Row-level inspection traced this to two causes: a genuine retrieval gap on a handful of clause-category questions ("does this contract have a non-compete clause?") against very large documents, where the question's abstract legal terminology shares little vocabulary with the contract's actual wording; and Ragas' strict claim-level entailment scoring penalizing some legitimate advisory-style answers even when they're factually well-grounded.
-- Retrieval parameters (`initial_k`/`final_k`) were tuned against this golden set — see `Evaluation/sweep_retrieval_params.py`.
+- Retrieval parameters (`initial_k`/`final_k`) and the retriever/prompt code are unchanged from the prior model — this run isolates the effect of the generation-model swap (`ragas_eval_results_gemini.csv`, vs. the prior `openai/gpt-oss-20b` baseline in `ragas_eval_results_gptoss.csv`: faithfulness 0.68, answer relevancy 0.69, context precision 0.59, context recall 0.69, factual faithfulness 0.57). The gap is driven by faithfulness and context recall specifically — Gemini reproduces retrieved figures/quotes more literally, which the claim-entailment scorer rewards directly.
+- Gemini generation runs behind a rotating multi-key client (`app/gemini_client.py`) to work around Google AI Studio's free-tier cap of 20 requests/day per project — sound at this app's prototype traffic level, not at production scale without a paid tier.
 
 Reproduce locally:
 ```bash

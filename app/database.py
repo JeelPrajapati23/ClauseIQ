@@ -1,7 +1,9 @@
 import os
 import re
+import time
 from typing import Any, List
 from dotenv import load_dotenv
+from cohere.errors.too_many_requests_error import TooManyRequestsError
 from langchain_cohere import CohereRerank
 from langchain_qdrant import QdrantVectorStore
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
@@ -319,6 +321,27 @@ def query_vector_db(query: str, k: int = 4, collection_name: str = "pdf_knowledg
     return qdrant.similarity_search(query=query, k=k)
 
 
+_RERANK_MAX_RETRIES = 3
+_RERANK_BASE_DELAY = 5.0  # seconds
+
+
+def _rerank_with_retry(compressor, context_docs: list, query: str) -> list:
+    """Cohere trial keys carry a short per-minute burst limit on top of the
+    monthly call cap (both surface as the same 429 TooManyRequestsError, with
+    the response headers distinguishing which — x-trial-endpoint-call-remaining
+    near-exhausted means the burst limit, not necessarily the monthly one). A
+    short retry with backoff rides out the burst-limit case instead of failing
+    the whole /ask/ or /compare/ request on a transient rate limit."""
+    for attempt in range(_RERANK_MAX_RETRIES):
+        try:
+            return compressor.compress_documents(context_docs, query)
+        except TooManyRequestsError:
+            if attempt == _RERANK_MAX_RETRIES - 1:
+                raise
+            time.sleep(_RERANK_BASE_DELAY * (2 ** attempt))
+    return []
+
+
 class ThresholdReranker(BaseRetriever):
     """Hybrid retriever: Qdrant vector + BM25 fused via RRF, then Cohere cross-encoder reranked.
 
@@ -338,7 +361,7 @@ class ThresholdReranker(BaseRetriever):
         # Swap to parent context before reranking so Cohere scores full legal
         # sections, not the tiny child fragments used for retrieval.
         context_docs = swap_to_parent_context(child_docs)
-        return self.compressor.compress_documents(context_docs, query)
+        return _rerank_with_retry(self.compressor, context_docs, query)
 
 
 def get_reranking_retriever(

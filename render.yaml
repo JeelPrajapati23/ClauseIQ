@@ -25,6 +25,13 @@ services:
         value: production
       - key: RAG_SYSTEM_PROMPT_FILE
         value: system_prompt_v3.txt
+      # Generation model (app/generator.py's llm). Comma-separated for multiple
+      # keys/projects — Google AI Studio's free tier caps each project at 20
+      # requests/day; app/gemini_client.py's RotatingGeminiChat pools keys to
+      # work around it. Sound at this app's prototype traffic level only.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Claim verification only (app/generator.py's _verifier) — not generation.
       - key: GROQ_API_KEY
         sync: false
       - key: COHERE_API_KEY

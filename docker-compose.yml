@@ -38,6 +38,7 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/clauseiq
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY must be set (comma-separated for multiple keys) — see .env}
       GROQ_API_KEY: ${GROQ_API_KEY}
       COHERE_API_KEY: ${COHERE_API_KEY}
       HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}

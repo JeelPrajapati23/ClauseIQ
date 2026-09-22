@@ -6,24 +6,29 @@ import logging
 from enum import Enum
 from typing import Literal
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 import instructor
 from groq import Groq, RateLimitError
 
+from app.gemini_client import RotatingGeminiChat, load_gemini_keys
+
 load_dotenv()
 
-# Generation model. The internal claim verifier (_verifier below) and the Ragas
-# judge intentionally stay on a different model than whatever wins this slot, so
-# neither self-grades its own generations.
-llm = ChatGroq(
-    model="openai/gpt-oss-20b",
-    temperature=0,
-    reasoning_effort="low",
-    api_key=os.getenv("GROQ_API_KEY")
+# Generation model. Swapped to gemini-2.5-flash on 2026-09-22 (a third attempt — see
+# the clauseiq-generation-model-swap memory for the two prior reverted swaps). The
+# blocker that killed the 2026-09-21 attempt (Google AI Studio's free tier caps a
+# project at 20 requests/day) isn't actually fixed here — there's still no billing
+# enabled — it's worked around by pooling multiple free-tier keys behind
+# RotatingGeminiChat (app/gemini_client.py), which rotates to the next key on a quota
+# error instead of the whole app going down. That's only sound because this app is
+# prototype-scale traffic; it is NOT a substitute for a paid tier under real load. The
+# internal claim verifier (_verifier below) and the Ragas judge both stay on Groq's
+# openai/gpt-oss-120b (matched to the eval judge on 2026-09-22) — a different model
+# than generation, so neither self-grades.
+llm = RotatingGeminiChat(
+    model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    api_keys=load_gemini_keys(),
 )
 
 _MAX_RETRIES = 3
@@ -280,7 +285,7 @@ def _extract_claims(answer: str) -> list[str]:
     for attempt in range(_MAX_RETRIES):
         try:
             result = _verifier.chat.completions.create(
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 temperature=0,
                 max_tokens=512,
                 reasoning_effort="low",
@@ -316,7 +321,7 @@ def _verify_claims(claims: list[str], context: str) -> list[VerifiedClaim]:
     for attempt in range(_MAX_RETRIES):
         try:
             result = _verifier.chat.completions.create(
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 temperature=0,
                 max_tokens=1024,
                 reasoning_effort="low",
@@ -418,18 +423,21 @@ def verify_answer_claims(question: str, context: str, generated_answer: str) -> 
 
 
 def _check_faithfulness_legacy(question: str, context: str, generated_answer: str) -> bool:
-    """Simple PASS/FAIL auditor — fallback only, used inside verify_answer_claims."""
+    """Simple PASS/FAIL auditor — fallback only, used inside verify_answer_claims.
+
+    Calls llm.invoke() directly (not an LCEL `prompt | llm | parser` chain) so this
+    works with any object exposing the minimal invoke([messages]) -> obj.content
+    shape, not just a LangChain Runnable — see RotatingGeminiChat in app/gemini_client.py.
+    """
     eval_prompt_text = (
         "You are a strict grading auditor.\n"
         "Compare the GENERATED ANSWER to the PROVIDED CONTEXT.\n"
         "If the GENERATED ANSWER contains ANY facts, numbers, or claims NOT explicitly "
         "stated in the PROVIDED CONTEXT, output the word FAIL.\n"
         "If the GENERATED ANSWER is entirely supported, output the word PASS.\n\n"
-        "PROVIDED CONTEXT:\n{context}\n\n"
-        "GENERATED ANSWER:\n{answer}\n\n"
+        f"PROVIDED CONTEXT:\n{context}\n\n"
+        f"GENERATED ANSWER:\n{generated_answer}\n\n"
         "Output ONLY 'PASS' or 'FAIL'. Do not explain."
     )
-    eval_prompt = ChatPromptTemplate.from_template(eval_prompt_text)
-    chain = eval_prompt | llm | StrOutputParser()
-    result = _invoke_with_retry(chain.invoke, {"context": context, "answer": generated_answer})
-    return "PASS" in result.strip().upper()
+    result = _invoke_with_retry(llm.invoke, [HumanMessage(content=eval_prompt_text)])
+    return "PASS" in result.content.strip().upper()
