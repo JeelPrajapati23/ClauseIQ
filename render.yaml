@@ -19,7 +19,7 @@ services:
     dockerContext: .
     plan: free
     region: singapore   # closest free-tier region to India; change to match wherever your Qdrant Cloud/Neon instances are for lowest internal latency
-    healthCheckPath: /docs
+    healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
         value: production

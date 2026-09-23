@@ -89,6 +89,14 @@ async def add_security_headers(request: Request, call_next):
 app.include_router(auth_router)
 
 
+# Unauthenticated, dependency-free liveness probe — pinged by
+# .github/workflows/keep-alive.yml to stop Render's free tier from sleeping.
+# Deliberately touches no DB/Qdrant so pings cost nothing.
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
