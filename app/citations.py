@@ -9,7 +9,7 @@ import os
 import re
 from difflib import SequenceMatcher
 
-from app.loader import _SECTION_RE
+from app.loader import find_headings
 
 # Fraction of a quote's characters that must appear (in order) in a parent for the
 # fuzzy fallback to accept it — the verifier's "verbatim" quotes drift slightly
@@ -52,12 +52,12 @@ def _locate(quote: str, text: str) -> tuple[float, int]:
 
 
 def _section_before(text: str, offset: int) -> str:
-    """The last section heading that starts before offset in the (normalized) parent."""
+    """The last heading that starts before offset (an offset into the normalized text)."""
     heading = ""
-    for m in _SECTION_RE.finditer(text):
-        if len(_normalize(text[:m.start()])) > offset:
+    for start, label in find_headings(text):
+        if len(_normalize(text[:start])) > offset:
             break
-        heading = m.group(0).strip()[:100]
+        heading = label
     return heading
 
 
@@ -96,8 +96,11 @@ def build_claim_citations(claims: list, parent_docs: list) -> list[dict]:
             "file": _source_file(best_doc),
             # Parents never span a page boundary (see app/loader.py), so this is exact.
             "page": pages[0] if pages else None,
+            # No heading above the quote in this chunk → the one carried in from earlier
+            # chunks (section_start; documents indexed before it existed have none).
+            # Not metadata["section"]: that can name a heading *after* the quote.
             "section": _section_before(best_doc.page_content, best_offset)
-                       or best_doc.metadata.get("section", ""),
+                       or best_doc.metadata.get("section_start", ""),
             "exact": best_score == 1.0,
         })
     return citations

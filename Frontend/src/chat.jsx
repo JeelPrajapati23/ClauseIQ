@@ -1525,9 +1525,11 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
                                   <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                                     <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink,
                                       lineHeight: 1.5, wordBreak: "break-word" }}>{c.claim}</span>
-                                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted,
+                                    {/* Section + page first: long filenames would otherwise ellipsize them away */}
+                                    <span title={c.source} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted,
                                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                      §{c.source}{c.section ? ` — ${c.section}` : ""}{c.pageRange ? ` · ${c.pageRange}` : ""}
+                                      {c.section && <span style={{ color: T.accent }}>§{c.section} · </span>}
+                                      {c.pageRange && `${c.pageRange} · `}{c.source}
                                     </span>
                                   </span>
                                 </button>
