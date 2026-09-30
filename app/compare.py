@@ -9,6 +9,7 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from app.database import embeddings, QDRANT_URL, QDRANT_API_KEY, swap_to_parent_context
 from app.generator import llm
+from app.gemini_client import GeminiUnavailableError, AI_QUOTA_EXHAUSTED_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +204,8 @@ def stream_comparison(
         sources = extract_sources(per_doc)
         yield f"data: {json.dumps({'type': 'done', 'sources': sources})}\n\n"
 
+    except GeminiUnavailableError:
+        yield f"data: {json.dumps({'type': 'error', 'detail': AI_QUOTA_EXHAUSTED_MESSAGE})}\n\n"
     except Exception:
         logger.exception("compare/ failed for query=%r", query)
         yield f"data: {json.dumps({'type': 'error', 'detail': 'Something went wrong while comparing the documents. Please try again.'})}\n\n"

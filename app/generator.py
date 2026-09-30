@@ -26,6 +26,8 @@ load_dotenv()
 # internal claim verifier (_verifier below) and the Ragas judge both stay on Groq's
 # openai/gpt-oss-120b (matched to the eval judge on 2026-09-22) — a different model
 # than generation, so neither self-grades.
+logger = logging.getLogger(__name__)
+
 llm = RotatingGeminiChat(
     model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
     api_keys=load_gemini_keys(),
@@ -136,7 +138,14 @@ def is_off_topic_llm(question: str) -> bool:
     """LLM-backed backstop for the keyword gate: classifies whether a question is
     unrelated to legal-document QA, catching phrasings the keyword list can't enumerate."""
     messages = [HumanMessage(content=_OFF_TOPIC_CLASSIFIER_PROMPT.format(question=question))]
-    result = _invoke_with_retry(llm.invoke, messages)
+    try:
+        result = _invoke_with_retry(llm.invoke, messages)
+    except Exception:
+        # Fail open: this is only a backstop behind the keyword gate, and the answer
+        # prompt's own refusal rules still apply — a classifier outage shouldn't take
+        # down every question with it.
+        logger.warning("Off-topic classifier unavailable; treating question as on-topic", exc_info=True)
+        return False
     verdict = result.content.strip().upper()
     return verdict.startswith("OFF")
 
@@ -188,8 +197,13 @@ def rephrase_question(question: str, history: list) -> str:
         f"Follow-up question: {question}\n\n"
         "Standalone question:"
     )
-    result = _invoke_with_retry(llm.invoke, [HumanMessage(content=prompt_text)])
-    return result.content.strip()
+    try:
+        result = _invoke_with_retry(llm.invoke, [HumanMessage(content=prompt_text)])
+    except Exception:
+        # Retrieval with the original wording beats failing the whole request.
+        logger.warning("Question rephrasing unavailable; retrieving with the original question", exc_info=True)
+        return question
+    return result.content.strip() or question
 
 
 # Retrieval struggles when a question names an abstract legal-clause category (e.g.

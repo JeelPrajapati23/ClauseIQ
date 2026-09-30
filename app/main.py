@@ -39,6 +39,7 @@ from groq import RateLimitError
 from cohere.errors.too_many_requests_error import TooManyRequestsError
 from app.compare import retrieve_per_doc, stream_comparison
 from app.citations import build_claim_citations
+from app.gemini_client import GeminiUnavailableError, AI_QUOTA_EXHAUSTED_MESSAGE
 
 from app.auth.db import init_db, get_db, SessionLocal
 from app.auth.models import User, AuditLog, DocumentJob, ChatSession, ChatMessage
@@ -549,6 +550,8 @@ async def ask_question(
 
         except (RateLimitError, TooManyRequestsError):
             yield f"data: {json.dumps({'type': 'error', 'detail': 'The AI service is temporarily rate-limited. Please wait a few seconds and try again.'})}\n\n"
+        except GeminiUnavailableError:
+            yield f"data: {json.dumps({'type': 'error', 'detail': AI_QUOTA_EXHAUSTED_MESSAGE})}\n\n"
         except Exception:
             logger.exception("ask/ failed for user=%s", current_user.id)
             yield f"data: {json.dumps({'type': 'error', 'detail': 'Something went wrong while answering your question. Please try again.'})}\n\n"
