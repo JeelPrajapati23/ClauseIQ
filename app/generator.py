@@ -375,6 +375,56 @@ def _build_report(verified: list[VerifiedClaim]) -> VerificationReport:
     return VerificationReport(claims=verified, verdict=verdict, faithfulness_score=score)
 
 
+# Budget for the context sent to _verify_claims. Legal PDF text measures ~2.6
+# chars/token on gpt-oss-120b, so 10k chars ≈ 3.9k prompt tokens; with the 1024
+# output tokens and the _extract_claims call, one verification stays around 6k —
+# under Groq's 8000 TPM per-key ceiling with some headroom.
+VERIFY_CONTEXT_MAX_CHARS = 10_000
+
+_VERIFY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9'.\-]*[a-z0-9]|[a-z0-9]")
+
+
+def _content_tokens(text: str) -> set[str]:
+    return {t for t in _VERIFY_TOKEN_RE.findall(text.lower()) if len(t) > 2 or t.isdigit()}
+
+
+def select_verification_context(context: str, answer: str, max_chars: int = VERIFY_CONTEXT_MAX_CHARS) -> str:
+    """
+    Fits the retrieved context into the verifier's budget by keeping the chunks
+    the answer most likely drew from, instead of blindly truncating — plain
+    truncation dropped every chunk after the first few, so claims grounded in a
+    later chunk were marked unfaithful and lost their citation.
+
+    Chunks (joined by "\\n---\\n", as main.py and the eval scripts build them) are
+    scored by IDF-weighted overlap with the answer's vocabulary — rare shared
+    terms (figures, party names, defined terms) count far more than words every
+    chunk contains. The best-scoring chunks that fit are kept, in original order.
+    """
+    if len(context) <= max_chars:
+        return context
+    import math
+    parts = context.split("\n---\n")
+    answer_tokens = _content_tokens(answer)
+    part_tokens = [_content_tokens(p) & answer_tokens for p in parts]
+    df: dict[str, int] = {}
+    for toks in part_tokens:
+        for t in toks:
+            df[t] = df.get(t, 0) + 1
+    scores = [sum(math.log(1 + len(parts) / df[t]) for t in toks) for toks in part_tokens]
+
+    keep: set[int] = set()
+    used = 0
+    for i in sorted(range(len(parts)), key=lambda i: scores[i], reverse=True):
+        cost = len(parts[i]) + len("\n---\n")
+        if used + cost <= max_chars:
+            keep.add(i)
+            used += cost
+    if not keep:  # single chunk bigger than the whole budget
+        best = max(range(len(parts)), key=lambda i: scores[i])
+        return parts[best][:max_chars]
+    return "\n---\n".join(parts[i] for i in sorted(keep))
+
+
 def verify_answer_claims(question: str, context: str, generated_answer: str) -> VerificationReport:
     """
     Two-call faithfulness audit:
@@ -384,7 +434,7 @@ def verify_answer_claims(question: str, context: str, generated_answer: str) -> 
     Falls back to legacy PASS/FAIL if either call fails.
     """
     import json as _json
-    truncated_context = context[:6000]
+    truncated_context = select_verification_context(context, generated_answer)
     try:
         raw_claims = _extract_claims(generated_answer)
         seen: set[str] = set()
