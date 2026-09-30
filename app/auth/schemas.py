@@ -1,15 +1,20 @@
-from typing import Optional
-from pydantic import BaseModel, EmailStr
+from typing import Annotated, Optional
+from pydantic import AfterValidator, BaseModel, EmailStr
 from datetime import datetime
+
+# EmailStr only lowercases the domain, so "Jeel@x.com" and "jeel@x.com" used to
+# register as two separate accounts (phone keyboards auto-capitalize the first
+# letter). Normalize the whole address on every inbound auth request.
+NormalizedEmail = Annotated[EmailStr, AfterValidator(str.lower)]
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str
 
 
@@ -34,7 +39,7 @@ class UserAdminItem(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class ResetPasswordRequest(BaseModel):

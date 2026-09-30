@@ -2,6 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.auth.db import get_db
 from app.auth.models import User, AuditLog
@@ -30,6 +31,18 @@ COOKIE_SAMESITE = "lax"
 COOKIE_SECURE = ENVIRONMENT == "production"
 
 
+def _find_user_by_email(db: Session, email: str):
+    """Case-insensitive lookup. New accounts are stored lowercase (see NormalizedEmail),
+    but accounts created before that may have capitals; if one address exists in two
+    casings, the oldest account wins so the choice is stable."""
+    return (
+        db.query(User)
+        .filter(func.lower(User.email) == email.lower())
+        .order_by(User.created_at)
+        .first()
+    )
+
+
 def _log(db: Session, action: str, user_id: str = None, detail: str = None, ip: str = None):
     db.add(AuditLog(user_id=user_id, action=action, detail=detail, ip_address=ip))
     db.commit()
@@ -38,7 +51,7 @@ def _log(db: Session, action: str, user_id: str = None, detail: str = None, ip: 
 @router.post("/register", status_code=201)
 @limiter.limit("5/minute")
 def register(body: RegisterRequest, request: Request, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == body.email).first():
+    if _find_user_by_email(db, body.email):
         raise HTTPException(409, "Email already registered")
     if len(body.password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
@@ -61,7 +74,7 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
 @router.post("/login")
 @limiter.limit("10/minute")
 def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email).first()
+    user = _find_user_by_email(db, body.email)
 
     if user and user.locked_until and user.locked_until > datetime.utcnow():
         remaining_min = int((user.locked_until - datetime.utcnow()).total_seconds() // 60) + 1
@@ -115,7 +128,7 @@ def me(current_user: User = Depends(get_current_user)):
 @router.post("/forgot-password")
 @limiter.limit("5/minute")
 def forgot_password(body: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email).first()
+    user = _find_user_by_email(db, body.email)
     # Always return the same message to prevent user enumeration
     if user and user.is_active:
         token = str(uuid.uuid4())
