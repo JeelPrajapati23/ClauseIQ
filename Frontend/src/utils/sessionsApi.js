@@ -1,4 +1,4 @@
-import { API_BASE_URL, extractErrorMessage } from "./api.js";
+import { API_BASE_URL, extractErrorMessage, fetchJson } from "./api.js";
 
 // Server-side chat session/message persistence. Mirrors the fetch conventions
 // already used inline in chat.jsx: credentials: "include" for the httponly
@@ -16,9 +16,16 @@ async function handle(res, onSessionExpired, fallbackError) {
   return res.json();
 }
 
-export function fetchSessions(onSessionExpired) {
-  return fetch(`${API_BASE_URL}/sessions`, { credentials: "include" })
-    .then((res) => handle(res, onSessionExpired, "Failed to load chat history."));
+// The first call after page load — goes through fetchJson so a sleeping backend
+// is waited for instead of failing (which used to leave an empty sidebar).
+export async function fetchSessions(onSessionExpired) {
+  const { res, data } = await fetchJson(`${API_BASE_URL}/sessions`, { credentials: "include" });
+  if (res.status === 401) {
+    onSessionExpired?.();
+    throw new Error("Session expired.");
+  }
+  if (!res.ok) throw new Error(extractErrorMessage(data, "Failed to load chat history."));
+  return data;
 }
 
 export function createSession(payload, onSessionExpired) {

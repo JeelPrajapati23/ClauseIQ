@@ -84,6 +84,7 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
 
   // ── Sessions (chat history) — persisted server-side, see utils/sessionsApi.js ──
   const [sessions, setSessions] = useState([]);
+  const [historyError, setHistoryError] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -132,27 +133,48 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
   }, [editingSessionId]);
 
   // ── Load chat history from the server on mount ───────────────────────────
+  const loadHistory = async (isCancelled = () => false) => {
+    setHistoryError(false);
+    try {
+      const list = await fetchSessions(onSessionExpired);
+      if (isCancelled()) return;
+      const mapped = list.map(mapSession);
+      setSessions(mapped);
+      if (mapped.length > 0) {
+        const full = await fetchSession(mapped[0].id, onSessionExpired);
+        if (isCancelled()) return;
+        const msgs = (full.messages || []).map(mapMessage);
+        setActiveSessionId(mapped[0].id);
+        setMessages(msgs);
+        setView(msgs.length > 0 || mapped[0].uploadedFiles.length > 0 ? "chat" : "empty");
+      }
+    } catch {
+      // Surface it — a silent failure here looks exactly like "this account has no chats".
+      if (!isCancelled()) setHistoryError(true);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    loadHistory(() => cancelled);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The list above is fetched once per page load, so a chat created on another
+  // device/browser never appeared here until a manual refresh. Re-sync the list
+  // (not the open chat) whenever this tab comes back into view.
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
       try {
         const list = await fetchSessions(onSessionExpired);
-        if (cancelled) return;
-        const mapped = list.map(mapSession);
-        setSessions(mapped);
-        if (mapped.length > 0) {
-          const full = await fetchSession(mapped[0].id, onSessionExpired);
-          if (cancelled) return;
-          const msgs = (full.messages || []).map(mapMessage);
-          setActiveSessionId(mapped[0].id);
-          setMessages(msgs);
-          setView(msgs.length > 0 || mapped[0].uploadedFiles.length > 0 ? "chat" : "empty");
-        }
-      } catch {
-        // Failed to reach the backend for history — leave the empty-state view.
-      }
-    })();
-    return () => { cancelled = true; };
+        setSessions(list.map(mapSession));
+        setHistoryError(false);
+      } catch { /* keep the current list; the next focus retries */ }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -914,7 +936,16 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
 
       {/* Sessions list */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
-        {filteredSessions.length === 0 ? (
+        {historyError ? (
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: "#fbbf24", lineHeight: 1.7, padding: "0 4px" }}>
+            Couldn't load your chat history.{" "}
+            <button onClick={() => loadHistory()}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                color: T.accent, fontFamily: T.mono, fontSize: 11, textDecoration: "underline" }}>
+              Retry
+            </button>
+          </div>
+        ) : filteredSessions.length === 0 ? (
           <p style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, lineHeight: 1.7, padding: "0 4px" }}>
             {searchQuery ? "No chats match your search." : "Upload a document to start your first chat."}
           </p>
