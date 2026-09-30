@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { API_BASE_URL, extractErrorMessage } from "../utils/api.js";
+import {
+  API_BASE_URL, extractErrorMessage, fetchJson,
+  BACKEND_WAKING_MESSAGE, BACKEND_UNREACHABLE_MESSAGE,
+} from "../utils/api.js";
 import { IcMail, IcLock, IcEye, IcEyeOff, IcArrow } from "./icons.jsx";
 import clauseiqMark from "../assets/clauseiq-mark.svg";
 
@@ -75,6 +78,8 @@ export default function Auth({ onLogin, initialResetToken, initialNotice }) {
     }
   };
 
+  const showWaking = () => setNotice(BACKEND_WAKING_MESSAGE);
+
   const COOKIE_BLOCKED_MESSAGE =
     "Signed in, but this browser blocked the session cookie, so you'd be signed out immediately. " +
     "Disable private/incognito mode or strict cookie-blocking settings for this site, then try again.";
@@ -90,13 +95,13 @@ export default function Auth({ onLogin, initialResetToken, initialNotice }) {
     setLoading(true);
     try {
       const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const { res, data } = await fetchJson(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ email: email.trim(), password }),
-      });
-      const data = await res.json();
+      }, showWaking);
+      setNotice("");
       if (!res.ok) { setError(extractErrorMessage(data, "Something went wrong.")); return; }
       if (mode === "register") {
         const loginRes = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -129,7 +134,8 @@ export default function Auth({ onLogin, initialResetToken, initialNotice }) {
         }
       }
     } catch {
-      setError("Cannot reach the backend. Make sure the API is running.");
+      setNotice("");
+      setError(BACKEND_UNREACHABLE_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -144,17 +150,18 @@ export default function Auth({ onLogin, initialResetToken, initialNotice }) {
     if (!email.trim()) { setError("Please enter your email address."); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      const { res, data } = await fetchJson(`${API_BASE_URL}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
-      });
-      const data = await res.json();
+      }, showWaking);
+      setNotice("");
       if (!res.ok) { setError(extractErrorMessage(data, "Something went wrong.")); return; }
       setSuccess(data.message);
       setEmail("");
     } catch {
-      setError("Cannot reach the backend. Make sure the API is running.");
+      setNotice("");
+      setError(BACKEND_UNREACHABLE_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -171,12 +178,12 @@ export default function Auth({ onLogin, initialResetToken, initialNotice }) {
     if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      const { res, data } = await fetchJson(`${API_BASE_URL}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: initialResetToken, new_password: newPassword }),
-      });
-      const data = await res.json();
+      }, showWaking);
+      setNotice("");
       if (!res.ok) { setError(extractErrorMessage(data, "Something went wrong.")); return; }
       setSuccess(data.message);
       setNewPassword("");
@@ -185,7 +192,8 @@ export default function Auth({ onLogin, initialResetToken, initialNotice }) {
       window.history.replaceState({}, "", "/");
       setTimeout(() => switchMode("login"), 1800);
     } catch {
-      setError("Cannot reach the backend. Make sure the API is running.");
+      setNotice("");
+      setError(BACKEND_UNREACHABLE_MESSAGE);
     } finally {
       setLoading(false);
     }

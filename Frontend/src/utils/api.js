@@ -22,3 +22,59 @@ export function extractErrorMessage(body, fallback) {
   if (typeof error === "string" && error) return error;
   return fallback;
 }
+
+// The production backend runs on Render's free tier, which sleeps when idle and
+// takes ~30-60s to wake. A request that arrives mid-wake fails outright or comes
+// back as a 5xx gateway page (HTML, not JSON) from the proxy. fetchJson treats
+// either as "still waking": it calls onWaking (so the UI can say so), waits for
+// /health to answer, then retries the request once.
+const WAKE_TIMEOUT_MS = 90_000;
+const WAKE_POLL_MS = 3_000;
+
+class BackendWakingError extends Error {}
+
+async function waitForBackend() {
+  const deadline = Date.now() + WAKE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      if ((await fetch(`${API_BASE_URL}/health`, { cache: "no-store" })).ok) return true;
+    } catch { /* still waking */ }
+    await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS));
+  }
+  return false;
+}
+
+async function attemptJson(url, options) {
+  let res;
+  try {
+    res = await fetch(url, options);
+  } catch {
+    throw new BackendWakingError();
+  }
+  if ([502, 503, 504].includes(res.status)) throw new BackendWakingError();
+  let data = {};
+  try {
+    data = await res.json();
+  } catch {
+    if (!res.ok) throw new BackendWakingError();
+  }
+  return { res, data };
+}
+
+// Returns {res, data}. Throws only if the backend still hasn't answered after
+// WAKE_TIMEOUT_MS — show BACKEND_UNREACHABLE_MESSAGE in that case.
+export async function fetchJson(url, options, onWaking) {
+  try {
+    return await attemptJson(url, options);
+  } catch (err) {
+    if (!(err instanceof BackendWakingError)) throw err;
+    onWaking?.();
+    if (!(await waitForBackend())) throw err;
+    return attemptJson(url, options);
+  }
+}
+
+export const BACKEND_WAKING_MESSAGE =
+  "The server is waking up after being idle — this can take up to a minute. Hang tight…";
+export const BACKEND_UNREACHABLE_MESSAGE =
+  "Couldn't reach the server. Please check your connection and try again in a minute.";
