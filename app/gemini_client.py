@@ -4,8 +4,8 @@ Google AI Studio's free tier caps gemini-2.5-flash at 20 requests/day PER PROJEC
 (confirmed the hard way in the 2026-09-21 swap attempt — see the
 clauseiq-generation-model-swap memory). This app has no billing enabled and is
 prototype-scale traffic only, so instead of paying for a higher tier we pool several
-free-tier keys/projects behind one client: on a quota/rate-limit error it rotates to
-the next key with backoff rather than failing the request. This only helps because
+free-tier keys/projects behind one client: on a quota/rate-limit error it moves on to
+the next usable key rather than failing the request (see RotatingGeminiChat). This only helps because
 traffic here is low enough that N keys x 20 req/day is enough headroom — it is not a
 real fix for production-scale traffic (see Evaluation/gemini_rotation.py, which uses
 the same rotation strategy for offline eval runs).
