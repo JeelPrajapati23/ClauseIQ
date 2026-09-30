@@ -38,6 +38,7 @@ from app.generator import stream_answer, verify_answer_claims, rephrase_question
 from groq import RateLimitError
 from cohere.errors.too_many_requests_error import TooManyRequestsError
 from app.compare import retrieve_per_doc, stream_comparison
+from app.citations import build_claim_citations
 
 from app.auth.db import init_db, get_db, SessionLocal
 from app.auth.models import User, AuditLog, DocumentJob, ChatSession, ChatMessage
@@ -535,10 +536,15 @@ async def ask_question(
                     "is_faithful": report.verdict == "PASS",
                 }
                 yield f"data: {json.dumps({'type': 'verification', **verification_payload})}\n\n"
+                # Claim-level citations: each verified claim's supporting quote, located
+                # back in the retrieved parents. Refines the coarser `sources` list above.
+                claim_citations = build_claim_citations(report.claims, retrieved_docs)
+                yield f"data: {json.dumps({'type': 'citations', 'citations': claim_citations})}\n\n"
                 if body.session_id:
                     _persist_chat_turn(
                         db, body.session_id, current_user.id, body.question, full_answer,
                         citations=sources_metadata, verification=verification_payload,
+                        extra={"claim_citations": claim_citations},
                     )
 
         except (RateLimitError, TooManyRequestsError):

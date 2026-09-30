@@ -31,6 +31,19 @@ const sourcesToAskCitations = (sources) => (sources || []).map((s) => ({
   preview: s.content_preview || null,
 }));
 
+// Claim-level citations (app/citations.py): one verified claim, the verbatim quote
+// supporting it, and the exact page it was found on.
+const toClaimCitations = (items) => (items || []).map((c) => ({
+  id: nextId(),
+  claim: c.claim,
+  quote: c.quote,
+  source: c.file,
+  page: c.page ?? null,
+  pageRange: c.page != null ? `p. ${c.page}` : "",
+  section: c.section || "",
+  exact: !!c.exact,
+}));
+
 const sourcesToCompareCitations = (sources) => (sources || []).map((s) => ({
   id: nextId(), source: s.file, page: s.page, preview: s.content_preview || null,
 }));
@@ -52,6 +65,7 @@ const mapMessage = (m) => {
   return {
     id: m.id, role: "assistant", content: m.content,
     citations: sourcesToAskCitations(m.citations),
+    claimCitations: toClaimCitations(m.extra?.claim_citations),
     verification: m.verification ? {
       verdict: m.verification.verdict,
       score: m.verification.score,
@@ -546,6 +560,12 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
               } : m
             );
             setMessages([...localMessages]);
+          } else if (data.type === "citations") {
+            const claimCitations = toClaimCitations(data.citations);
+            localMessages = localMessages.map((m) =>
+              m.id === assistantId ? { ...m, claimCitations } : m
+            );
+            setMessages([...localMessages]);
           } else if (data.type === "error") {
             localMessages = localMessages.map((m) =>
               m.id === assistantId ? { ...m, content: data.detail || "Something went wrong.", isError: true } : m
@@ -751,8 +771,39 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
         </button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 22px 28px" }}>
-        {/* New format: citation object with pageRange + section */}
-        {selectedCitation.id ? (() => {
+        {/* Claim-level citation: the claim plus the verbatim quote supporting it */}
+        {selectedCitation.quote ? (
+          <>
+            {selectedCitation.section && (
+              <div style={{ fontFamily: T.mono, fontSize: 11, color: T.accent,
+                letterSpacing: "0.06em", marginBottom: 12, wordBreak: "break-word" }}>
+                {selectedCitation.section}
+              </div>
+            )}
+            {selectedCitation.pageRange && (
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 14 }}>
+                <span style={{ color: T.accent, flexShrink: 0 }}><IcPage s={12} /></span>
+                <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 500,
+                  color: T.accent, letterSpacing: "0.06em" }}>{selectedCitation.pageRange.toUpperCase()}</span>
+              </div>
+            )}
+            <div style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, letterSpacing: "0.06em", marginBottom: 6 }}>
+              CLAIM
+            </div>
+            <p style={{ fontSize: 13, lineHeight: 1.7, color: T.ink, margin: "0 0 16px",
+              wordBreak: "break-word", overflowWrap: "break-word" }}>
+              {selectedCitation.claim}
+            </p>
+            <div style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, letterSpacing: "0.06em", marginBottom: 6 }}>
+              SOURCE TEXT
+            </div>
+            <blockquote style={{ margin: 0, padding: "2px 0 2px 12px", borderLeft: `2px solid ${T.accent}`,
+              fontSize: 13, lineHeight: 1.85, color: T.ink, fontStyle: "italic",
+              wordBreak: "break-word", overflowWrap: "break-word" }}>
+              “{selectedCitation.quote}”
+            </blockquote>
+          </>
+        ) : selectedCitation.id ? (() => {
           const { section, pageRange, page, preview } = selectedCitation;
           const rangeLabel = pageRange || (page != null ? `p. ${page}` : null);
           return (
@@ -810,7 +861,11 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
         <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px dashed ${T.border2}`,
           display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ color: T.accent }}><IcCheck /></span>
-          <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>Cited from retrieved context</span>
+          <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>
+            {selectedCitation.quote
+              ? (selectedCitation.exact ? "Quoted verbatim from the document" : "Closely matches the document text")
+              : "Cited from retrieved context"}
+          </span>
         </div>
       </div>
     </>
@@ -1417,7 +1472,40 @@ export default function Chat({ authUser, onLogout, onSessionExpired }) {
                           );
                         })()}
 
-                        {m.citations && m.citations.length > 0 && (() => {
+                        {/* Claim-level evidence — supersedes the source chips once verification has located each claim's quote */}
+                        {m.claimCitations?.length > 0 && (
+                          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, letterSpacing: "0.06em" }}>
+                              EVIDENCE
+                            </div>
+                            {m.claimCitations.map((c, i) => {
+                              const isActive = selectedCitation?.id === c.id;
+                              return (
+                                <button key={c.id}
+                                  onClick={() => setSelectedCitation(isActive ? null : c)}
+                                  className="bf-cite"
+                                  style={{ display: "flex", gap: 10, alignItems: "flex-start", textAlign: "left",
+                                    width: "100%", padding: "7px 10px", borderRadius: 8, cursor: "pointer",
+                                    border: `1px solid ${isActive ? T.accent : T.border2}`,
+                                    background: isActive ? "rgba(198,242,74,0.06)" : "transparent",
+                                    transition: "all .14s", minWidth: 0 }}>
+                                  <span style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 600,
+                                    color: T.accent, flexShrink: 0, lineHeight: 1.6 }}>[{i + 1}]</span>
+                                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                                    <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink,
+                                      lineHeight: 1.5, wordBreak: "break-word" }}>{c.claim}</span>
+                                    <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      §{c.source}{c.section ? ` — ${c.section}` : ""}{c.pageRange ? ` · ${c.pageRange}` : ""}
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {!(m.claimCitations?.length > 0) && m.citations && m.citations.length > 0 && (() => {
                           return (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
                               {m.citations.map((c) => {
