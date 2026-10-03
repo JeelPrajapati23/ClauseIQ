@@ -36,6 +36,7 @@ Built as an end-to-end system: FastAPI backend, Qdrant hybrid search + Cohere re
 - **Two-call claim-level faithfulness verification** — after every answer, a separate LLM pass extracts each factual claim (without seeing the context, to avoid bias) and checks it against the retrieved chunks for a verbatim supporting quote, producing a `PASS` / `PARTIAL` / `FAIL` verdict and a 0–1 faithfulness score per answer.
 - **Streaming answers** — token-by-token via Server-Sent Events (SSE), with sources and verification results streamed alongside.
 - **Multi-document comparison mode** — ask one question across 2+ documents; the model is instructed to evaluate each document independently and cite file + page for every claim, never mixing facts across documents.
+- **Trained off-topic classifier** — every question first passes a "System-1" gate: a logistic-regression classifier over the question's embedding, trained on ~10k labelled questions, returns a calibrated off-topic probability and decides ~90% of questions on its own in milliseconds. Only the uncertain ~10% go to an LLM. Replacing the per-question LLM check cut wrongly-refused legal questions from 37% to 1.6% on a held-out sample and roughly halved Gemini usage per question (see [Evaluation Results](#off-topic-classifier)).
 - **Guardrails** — if no relevant context is retrieved, a canned refusal is streamed with zero LLM calls; refusal-paraphrase detection prevents a "confident-sounding non-answer" from being mis-verified as faithful.
 
 **Multi-Tenancy & Auth**
@@ -65,7 +66,8 @@ flowchart TB
     subgraph Backend["FastAPI Backend"]
         Auth["Auth Router<br/>JWT cookie · lockout · audit log"]
         Upload["Upload & Index<br/>PDF parse -> chunk -> embed"]
-        Ask["Ask (SSE)<br/>intent classify -> retrieve -> generate -> verify"]
+        Ask["Ask (SSE)<br/>off-topic gate -> intent classify -> retrieve -> generate -> verify"]
+        Gate["Off-topic gate<br/>keywords -> embedding classifier -> LLM only if unsure"]
         Compare["Compare (SSE)<br/>per-doc MMR retrieval -> multi-doc prompt"]
         Admin["Admin Routes<br/>users · audit logs · documents"]
     end
@@ -98,6 +100,10 @@ flowchart TB
     Upload --> Embed --> Qdrant
     Upload --> Files
 
+    Ask --> Gate
+    Compare --> Gate
+    Gate --> |"question embedding"| Embed
+    Gate -.-> |"uncertain ~10%"| Gemini
     Ask --> Hybrid
     Compare --> Hybrid
     Hybrid --> Qdrant
@@ -113,13 +119,14 @@ flowchart TB
 
 **Request flow for `/ask`:**
 
-1. Classify intent (`FACT` / `ANALYTICAL`) → picks retrieval width + system prompt.
-2. If the question references prior turns ("it", "that", …), rephrase into a standalone query using conversation history.
-3. Hybrid retrieve (vector + BM25 → RRF) scoped to `user_id`, rerank with Cohere, swap children for parent context.
-4. If nothing relevant was retrieved → stream a canned refusal, skip the LLM entirely.
-5. Stream the answer token-by-token from Gemini 2.5 Flash (a rotating pool of free-tier API keys — see [Tech Stack](#tech-stack)).
-6. Attribute the answer back to source parents by embedding similarity (cosine ≥ 0.3).
-7. Run the two-call claim-level faithfulness audit and stream the verdict + sources.
+1. Off-topic gate: a keyword list, then the trained embedding classifier (block / allow / unsure), then a Gemini check only for unsure questions. Off-topic questions get a canned refusal before any retrieval. The question's embedding is cached, so retrieval reuses it.
+2. Classify intent (`FACT` / `ANALYTICAL`) → picks retrieval width + system prompt.
+3. If the question references prior turns ("it", "that", …), rephrase into a standalone query using conversation history.
+4. Hybrid retrieve (vector + BM25 → RRF) scoped to `user_id`, rerank with Cohere, swap children for parent context.
+5. If nothing relevant was retrieved → stream a canned refusal, skip the LLM entirely.
+6. Stream the answer token-by-token from Gemini 2.5 Flash (a rotating pool of free-tier API keys — see [Tech Stack](#tech-stack)).
+7. Attribute the answer back to source parents by embedding similarity (cosine ≥ 0.3).
+8. Run the two-call claim-level faithfulness audit and stream the verdict + sources.
 
 ---
 
@@ -130,6 +137,7 @@ flowchart TB
 | Backend framework | FastAPI, Uvicorn |
 | LLM generation | Gemini 2.5 Flash, streamed via SSE, behind a rotating multi-key client (`app/gemini_client.py`) to pool free-tier daily quotas — prototype-scale traffic only, not a substitute for a paid tier |
 | Structured extraction | `instructor`-patched Groq client (claim extraction/verification — deliberately a different model than generation, so it never self-grades) |
+| Off-topic classifier | Logistic regression on query embeddings, trained with a numpy Newton solver and served with numpy alone (`app/offtopic_classifier.py`, weights in `app/models/`) |
 | Vector database | Qdrant |
 | Reranking | Cohere `rerank-english-v3.0` |
 | Embeddings | `Snowflake/snowflake-arctic-embed-l-v2.0`, served via Hugging Face's hosted Inference API |
@@ -156,7 +164,9 @@ ask-my-docs-rag/
 │   ├── pdf_parser.py           # PyMuPDF extraction, two-column detection, reading-order sort
 │   ├── loader.py               # Parent-child chunking (2000/0 parents, 350/50 children)
 │   ├── database.py             # Qdrant client, BM25 cache, hybrid retriever, reranker, attribution
-│   ├── generator.py            # Gemini streaming, intent classification, faithfulness verification
+│   ├── generator.py            # Gemini streaming, off-topic gate, intent classification, faithfulness verification
+│   ├── offtopic_classifier.py  # Trained off-topic classifier (scores the question embedding, numpy only)
+│   ├── models/                 # offtopic_classifier.json — exported classifier weights + thresholds
 │   ├── gemini_client.py        # Rotating multi-key Gemini client (production generation model)
 │   ├── compare.py               # Multi-document MMR retrieval + comparison prompt + SSE
 │   ├── batch_index.py           # Standalone bulk-indexer for ingestion-docs/ (full collection wipe)
@@ -184,6 +194,7 @@ ask-my-docs-rag/
 │   ├── golden_doc_map.json       # source_row -> originating contract map
 │   ├── evaluate_rag_offline.py   # Runs the real pipeline per question, scores with Ragas
 │   ├── sweep_retrieval_params.py # Fast, judge-free retrieval parameter sweep
+│   ├── offtopic/                 # Off-topic classifier: dataset building, labelling guide, training, comparison
 │   └── build_golden_set.py, build_golden_doc_map.py, ...  # Golden set generation scripts
 ├── ingestion-docs/               # Sample legal PDFs for batch_index.py
 ├── Dockerfile                     # Backend image (python:3.11-slim, CPU-only torch)
@@ -344,6 +355,60 @@ cd Evaluation
 python evaluate_rag_offline.py   # resumable — skips source_rows already in the output CSV
 ```
 
+### Off-topic classifier
+
+The off-topic gate used to send every question to Gemini with a yes/no prompt. That cost half of each question's free-tier quota, added ~2 s, and, as measured below, refused a large share of legitimate legal questions. It's now a trained classifier with Gemini only as a fallback.
+
+**How it was built** (`Evaluation/offtopic/`):
+- **Boundary first.** A written labelling guide (`LABELLING_GUIDE.md`, 10 on-topic and 9 off-topic rules) defines what counts. Notably, general legal questions count as on-topic, and the guide leans toward on-topic because wrongly refusing a real user costs more than one wasted LLM call.
+- **Data.** ~10.7k questions:
+  - 6.8k from public datasets: PrivacyQA, LegalBench consumer-contracts QA and Law Stack Exchange (on-topic and grey-zone), CLINC150 and English WildChat (off-topic). Licences and samples were verified live.
+  - ~4k generated: contract questions from real CUAD clauses in varied styles (casual, typos, fragments, follow-ups, pasted clauses), plus hard negatives that look on-topic but aren't.
+- **Labels.** `gpt-oss-120b` labelled every row without seeing its source; rows where its label disagreed with the source's were re-checked.
+- **Leakage controls.** Splits are grouped so rewordings of one question never cross train/test, and near-duplicates (e.g. one WildChat prompt template repeated across conversations) are removed from train.
+- **Model.** Logistic regression on the question's `snowflake-arctic-embed-l-v2.0` embedding: the same embedding retrieval already computes, so the gate adds no extra API call when the question isn't rephrased. Regularisation and two decision thresholds are set on validation data (block if ≤1% of on-topic questions would be blocked; allow if ≤2% of off-topic would get through). Questions in between go to Gemini.
+
+**Held-out test set (422 questions, including every hard case from the test pool):**
+
+| Metric | Score |
+|---|---|
+| On-topic questions wrongly blocked | 1.1% (3/263; 95% CI 0.4–3.3%) |
+| Off-topic questions let through | 1.3% (2/159; 95% CI 0.4–4.5%) |
+| Sent to the Gemini fallback | 10% |
+| ROC AUC | 0.993 |
+| Calibration error (ECE) | 0.026 |
+
+**Old gate vs. new, same 100-question stratified sample of the test set:**
+
+| | Old: Gemini on every question | New: classifier + Gemini when unsure |
+|---|---|---|
+| On-topic questions wrongly blocked | **37%** (23/62) | **1.6%** (1/62) |
+| Off-topic questions let through | 2.6% (1/38) | 0% (0/38) |
+| Accuracy | 76% | 99% |
+| Gemini calls per question (gate only) | 1.0 | 0.09 |
+| Gate latency | ~2 s median (Gemini call) | ~0.3 s (embedding, reused by retrieval) |
+
+About a third of the old gate's 23 false blocks come from the guide deliberately widening the boundary (general legal questions are now on-topic). The rest were core usage the old prompt got wrong by its own definition: pasted clauses, negotiation questions, privacy-policy questions.
+
+**Caveats:**
+- The test set's labels were checked by Claude (a second model family reviewing `gpt-oss-120b`'s labels, overriding 1.4%), not by a human. These numbers measure agreement with two independent models applying the guide.
+- A second round of training data targeted categories found by inspecting test errors (questions about the app or the conversation, mixed requests). That made the final test numbers mildly optimistic.
+- Known gap: a mixed request ("explain the payment schedule *and* set a reminder") can still be blocked, because one embedding of the whole message is dominated by its off-topic part.
+- The gate is a **cost and quality filter, not a security boundary**: wrapping any request in legal vocabulary scores on-topic. User isolation is enforced by per-user filters in the data layer, not by the gate (see [Security Highlights](#security-highlights)).
+
+Reproduce (each step is resumable; see the docstrings in `Evaluation/offtopic/`):
+```bash
+python Evaluation/offtopic/fetch_sources.py
+python Evaluation/offtopic/generate_questions.py
+python Evaluation/offtopic/generate_targeted.py
+python Evaluation/offtopic/label_with_llm.py
+python Evaluation/offtopic/build_splits.py
+python Evaluation/offtopic/finalize_test_set.py --reviewer <who reviewed test_to_review.csv>
+python Evaluation/offtopic/embed_dataset.py
+python Evaluation/offtopic/train_classifier.py
+python Evaluation/offtopic/compare_classifiers.py --dry-run   # uses live Gemini quota; check the call count first
+```
+
 ---
 
 ## Security Highlights
@@ -353,5 +418,6 @@ python evaluate_rag_offline.py   # resumable — skips source_rows already in th
 - Per-IP rate limiting (`slowapi`) **and** independent per-account login lockout after repeated failures. The rate limiter and audit log both resolve the real client IP from `X-Forwarded-For` rather than the raw TCP peer, since a reverse-proxied deployment would otherwise attribute every request to the same proxy IP.
 - Uploaded/deleted filenames are sanitized to a bare basename before touching the filesystem — no path traversal.
 - Request bodies are size-capped (question/history length, filter list sizes) to bound LLM cost and context abuse.
+- The off-topic gate's LLM fallback treats the user's question as data: it's passed as an escaped JSON string inside delimiters, and only an exact `ON_TOPIC`/`OFF_TOPIC` reply is accepted. The gate itself is documented as a cost/quality filter, not a security control.
 - Unexpected server errors are logged internally and never leak raw exception details to the client.
 - Full audit log of every meaningful account and data action, including real client IP.
