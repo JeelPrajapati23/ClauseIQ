@@ -8,7 +8,7 @@ import json
 import logging
 import shutil
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 import fitz  # PyMuPDF — already a transitive dep via pdf_parser
 
@@ -106,6 +106,17 @@ def on_startup():
 
 UPLOAD_DIR = "uploaded_files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Route handlers that touch Postgres/Qdrant/embeddings/LLMs are plain `def`, not
+# `async def`: every one of those clients is blocking, and FastAPI runs `def` handlers
+# in its threadpool. As `async def` they ran on the event loop and, with the single
+# uvicorn worker, stalled every other request (including /health) while they worked —
+# /compare/ did its off-topic check and per-document retrieval there before streaming.
+
+# A job still "processing" after this long was lost (the instance restarted or
+# redeployed mid-indexing — background tasks don't survive that) and is reported as
+# failed, so the frontend stops polling instead of waiting forever.
+STALE_JOB_MINUTES = 20
 
 
 def _format_page_range(pages: list) -> str:
@@ -208,7 +219,7 @@ def _run_indexing_job(job_id: str, file_path: str, user_id: str, safe_filename: 
 
 @app.post("/upload-and-index", status_code=202)
 @limiter.limit("10/minute")
-async def upload_and_process_pdf(
+def upload_and_process_pdf(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -267,7 +278,7 @@ async def upload_and_process_pdf(
 
 
 @app.get("/upload-jobs/{job_id}")
-async def get_upload_job_status(
+def get_upload_job_status(
     job_id: str,
     current_user: User = Depends(require_active_user),
     db: Session = Depends(get_db),
@@ -277,6 +288,10 @@ async def get_upload_job_status(
     ).first()
     if not job:
         raise HTTPException(404, "Upload job not found.")
+    if job.status == "processing" and job.created_at < datetime.utcnow() - timedelta(minutes=STALE_JOB_MINUTES):
+        job.status = "failed"
+        job.error_message = "Processing was interrupted. Please upload the document again."
+        db.commit()
     return {
         "job_id": job.id,
         "filename": job.source_file,
@@ -287,7 +302,7 @@ async def get_upload_job_status(
 
 
 @app.delete("/documents/{source_file:path}")
-async def delete_document(
+def delete_document(
     request: Request,
     source_file: str,
     current_user: User = Depends(require_active_user),
@@ -412,7 +427,7 @@ class AskRequest(BaseModel):
 
 @app.post("/ask")
 @limiter.limit("20/minute")
-async def ask_question(
+def ask_question(
     request: Request,
     body: AskRequest,
     current_user: User = Depends(require_active_user),
@@ -576,7 +591,7 @@ class CompareRequest(BaseModel):
 
 @app.post("/compare")
 @limiter.limit("10/minute")
-async def compare_documents(
+def compare_documents(
     request: Request,
     body: CompareRequest,
     current_user: User = Depends(require_active_user),

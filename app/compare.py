@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 COLLECTION = "pdf_knowledge_base"
 CHUNKS_PER_DOC = 5
-TOKEN_LIMIT = 4000  # chars / 4 ≈ tokens; above this, summarize each doc first
+# chars / 4 ≈ tokens; above this, summarize each doc first. Sized for gemini-2.5-flash's
+# 1M-token context — the old 4000 dated from Groq's small models and triggered one
+# extra sequential Gemini call per document on most 3+-document comparisons, each
+# against the free tier's 20-requests/day-per-key quota.
+TOKEN_LIMIT = 30000
 
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
@@ -130,7 +134,11 @@ def build_comparison_prompt(
         "3. If the retrieved text does not explicitly answer the query for a document, write 'Not found in [document name]'. Never infer, speculate, or rely on common contract language.\n"
         "4. Do not mix information across documents. Evaluate each document independently before comparing them.\n"
         "5. Avoid repetition. Do not restate the same finding across multiple sections.\n"
-        "6. Keep the response concise.\n\n"
+        "6. Keep the response concise.\n"
+        # gemini-2.5-flash degenerates inside markdown tables here (pads a cell with
+        # spaces until its output limit — see gemini_client._MAX_WHITESPACE_RUN), which
+        # happened in 5 of 6 live comparisons while the prompt offered an optional table.
+        "7. Do not use tables. Use bullet points only.\n\n"
 
         "Respond using EXACTLY these sections:\n\n"
 
@@ -140,19 +148,6 @@ def build_comparison_prompt(
         "- Quote or closely paraphrase ONLY the relevant clause.\n"
         "- Cite the document name and page.\n"
         "- Maximum two bullet points per document.\n\n"
-
-        "## COMPARISON TABLE (optional)\n"
-        "Include this section ONLY when a side-by-side table meaningfully clarifies the comparison. "
-        "Omit it if the differences are already clear from the COMPARISON section.\n\n"
-        "When included:\n"
-        "1. First identify the main legal concept in the query.\n"
-        "2. Create columns that capture ONLY the sub-attributes of that concept. Examples:\n"
-        "   - Query: Intellectual Property  → columns: Document | Ownership | Trademark License\n"
-        "   - Query: Confidentiality        → columns: Document | Confidentiality | Survival\n"
-        "   - Query: Termination            → columns: Document | Breach | Insolvency | Convenience\n"
-        "   - Query: Governing Law          → columns: Document | Governing Law | Arbitration\n"
-        "3. Use a markdown table with one row per document.\n"
-        "4. Leave a cell blank or write 'Not found' if that attribute is absent in a document.\n\n"
 
         "## KEY DIFFERENCES\n"
         "- List only the 3–6 most significant differences.\n"

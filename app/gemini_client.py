@@ -87,6 +87,26 @@ def _cooldown_seconds(exc: ClientError) -> float:
     return float(m.group(1)) if m else _DEFAULT_COOLDOWN_S
 
 
+# gemini-2.5-flash sometimes degenerates inside a markdown table, padding a cell with
+# whitespace until it hits its output limit — seen live on /compare/ (2026-10-03):
+# "| Document" followed by ~20k spaces in one run and ~2M characters (6 minutes of
+# streaming, far past Vercel's 120s proxy timeout) in another. No real answer has a
+# whitespace run this long, so output is cut where such a run starts.
+_MAX_WHITESPACE_RUN = 80
+_WHITESPACE_RUN_RE = re.compile(r"\s{%d,}" % (_MAX_WHITESPACE_RUN + 1))
+
+
+def _degenerate_cut(text: str, run: int) -> tuple[int, int | None]:
+    """Scans text, continuing a whitespace run of length `run` carried over from the
+    previous chunk. Returns (run length at the end of text, index in text where an
+    over-long run starts, or None if there isn't one)."""
+    for i, ch in enumerate(text):
+        run = run + 1 if ch.isspace() else 0
+        if run > _MAX_WHITESPACE_RUN:
+            return run, max(0, i - run + 1)
+    return run, None
+
+
 class RotatingGeminiChat:
     """LangChain-chat-model-shaped wrapper around google-genai that rotates across
     multiple API keys on quota/rate-limit/capacity errors.
@@ -154,7 +174,12 @@ class RotatingGeminiChat:
             try:
                 resp = self._clients[idx].models.generate_content(model=self._model, contents=contents, config=cfg)
                 self._index = idx
-                return _Chunk(resp.text or "")
+                text = resp.text or ""
+                m = _WHITESPACE_RUN_RE.search(text)
+                if m:
+                    logger.warning("Gemini output degenerated into a whitespace run; truncated at %d chars", m.start())
+                    text = text[:m.start()]
+                return _Chunk(text)
             except (ClientError, ServerError) as exc:
                 last_exc = exc
                 self._handle_error(idx, exc)
@@ -169,12 +194,21 @@ class RotatingGeminiChat:
         last_exc: Exception | None = None
         for idx in self._usable_keys():
             yielded_any = False
+            ws_run = 0
             try:
                 for chunk in self._clients[idx].models.generate_content_stream(
                     model=self._model, contents=contents, config=cfg
                 ):
+                    text = chunk.text or ""
+                    ws_run, cut = _degenerate_cut(text, ws_run)
+                    if cut is not None:
+                        logger.warning("Gemini stream degenerated into a whitespace run; stopping it")
+                        if text[:cut]:
+                            yield _Chunk(text[:cut])
+                        self._index = idx
+                        return
                     yielded_any = True
-                    yield _Chunk(chunk.text or "")
+                    yield _Chunk(text)
                 self._index = idx
                 return
             except (ClientError, ServerError) as exc:

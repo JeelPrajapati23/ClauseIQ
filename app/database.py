@@ -125,18 +125,36 @@ def invalidate_bm25_cache() -> None:
     _bm25_version += 1
 
 
+_SCROLL_PAGE_SIZE = 1000
+
+
+def _scroll_all(client: QdrantClient, collection_name: str, scroll_filter: Filter) -> list:
+    """Every point matching scroll_filter, following Qdrant's pagination. A single
+    scroll() call returns at most `limit` points, which silently truncated the BM25
+    corpus once a user had more chunks than that (one 150-page PDF is ~1500)."""
+    records, offset = [], None
+    while True:
+        page, offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=scroll_filter,
+            limit=_SCROLL_PAGE_SIZE,
+            offset=offset,
+            with_payload=True,
+        )
+        records.extend(page)
+        if offset is None:
+            return records
+
+
 def _build_bm25_retriever(collection_name: str, k: int, doc_filter: tuple, user_id: str):
     try:
         client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-        user_filter = Filter(must=[FieldCondition(key="metadata.user_id", match=MatchValue(value=user_id))])
-        records, _ = client.scroll(
-            collection_name=collection_name,
-            limit=2000,
-            with_payload=True,
-            scroll_filter=user_filter,
-        )
-        if not records:
-            return None
+        conditions = [FieldCondition(key="metadata.user_id", match=MatchValue(value=user_id))]
+        # Filter by document in Qdrant, not after the scroll, so only the chunks
+        # this question can actually use are fetched.
+        if doc_filter:
+            conditions.append(FieldCondition(key="metadata.source_file", match=MatchAny(any=list(doc_filter))))
+        records = _scroll_all(client, collection_name, Filter(must=conditions))
         docs = [
             Document(
                 page_content=r.payload.get("page_content", ""),
@@ -144,8 +162,6 @@ def _build_bm25_retriever(collection_name: str, k: int, doc_filter: tuple, user_
             )
             for r in records
         ]
-        if doc_filter:
-            docs = [d for d in docs if d.metadata.get("source_file", "") in doc_filter]
         if not docs:
             return None
         retriever = BM25Retriever.from_documents(docs, preprocess_func=bm25_preprocess)
