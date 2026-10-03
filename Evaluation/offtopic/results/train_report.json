@@ -1,0 +1,550 @@
+{
+  "sizes": {
+    "train": 7178,
+    "val": 1325,
+    "test": 422
+  },
+  "C": 3,
+  "val_log_loss_by_C": {
+    "0.03": 0.336,
+    "0.1": 0.2303,
+    "0.3": 0.1677,
+    "1": 0.1292,
+    "3": 0.1148,
+    "10": 0.1156,
+    "30": 0.1267,
+    "100": 0.1483
+  },
+  "calibration": {
+    "ece_before": 0.0228,
+    "brier_before": 0.0303,
+    "platt": false,
+    "ece_after": 0.0228,
+    "brier_after": 0.0303,
+    "reliability_val": [
+      {
+        "bin": "0.0-0.1",
+        "n": 752,
+        "mean_pred": 0.014,
+        "frac_off": 0.008
+      },
+      {
+        "bin": "0.1-0.2",
+        "n": 68,
+        "mean_pred": 0.141,
+        "frac_off": 0.088
+      },
+      {
+        "bin": "0.2-0.3",
+        "n": 29,
+        "mean_pred": 0.243,
+        "frac_off": 0.069
+      },
+      {
+        "bin": "0.3-0.4",
+        "n": 15,
+        "mean_pred": 0.357,
+        "frac_off": 0.267
+      },
+      {
+        "bin": "0.4-0.5",
+        "n": 18,
+        "mean_pred": 0.451,
+        "frac_off": 0.556
+      },
+      {
+        "bin": "0.5-0.6",
+        "n": 14,
+        "mean_pred": 0.564,
+        "frac_off": 0.857
+      },
+      {
+        "bin": "0.6-0.7",
+        "n": 17,
+        "mean_pred": 0.658,
+        "frac_off": 0.647
+      },
+      {
+        "bin": "0.7-0.8",
+        "n": 20,
+        "mean_pred": 0.763,
+        "frac_off": 0.8
+      },
+      {
+        "bin": "0.8-0.9",
+        "n": 55,
+        "mean_pred": 0.859,
+        "frac_off": 0.945
+      },
+      {
+        "bin": "0.9-1.0",
+        "n": 337,
+        "mean_pred": 0.974,
+        "frac_off": 0.985
+      }
+    ]
+  },
+  "thresholds": {
+    "t_low": 0.14162739852084824,
+    "t_high": 0.7725730083385408
+  },
+  "learning_curve": [
+    {
+      "train_frac": 0.25,
+      "n_train": 1705,
+      "val_auc": 0.9888,
+      "val_log_loss": 0.1488
+    },
+    {
+      "train_frac": 0.5,
+      "n_train": 3594,
+      "val_auc": 0.9891,
+      "val_log_loss": 0.128
+    },
+    {
+      "train_frac": 1.0,
+      "n_train": 7178,
+      "val_auc": 0.9904,
+      "val_log_loss": 0.1148
+    }
+  ],
+  "test": {
+    "overall": {
+      "n": 422,
+      "n_on": 263,
+      "n_off": 159,
+      "false_block_rate": 0.0114,
+      "false_block_ci95": [
+        0.0039,
+        0.033
+      ],
+      "false_blocks": 3,
+      "slip_rate": 0.0126,
+      "slip_ci95": [
+        0.0035,
+        0.0447
+      ],
+      "slips": 2,
+      "defer_rate": 0.0995,
+      "accuracy_at_0.5": 0.9645,
+      "auc": 0.9928
+    },
+    "ece": 0.0258,
+    "brier": 0.0279,
+    "reviewed_by": [
+      "claude-opus-5-5"
+    ],
+    "source=clinc": {
+      "n": 51,
+      "n_on": 3,
+      "n_off": 48,
+      "false_block_rate": 0.0,
+      "false_block_ci95": [
+        0.0,
+        0.5615
+      ],
+      "false_blocks": 0,
+      "slip_rate": 0.0,
+      "slip_ci95": [
+        0.0,
+        0.0741
+      ],
+      "slips": 0,
+      "defer_rate": 0.1765,
+      "accuracy_at_0.5": 0.9412,
+      "auc": 0.9653
+    },
+    "source=consumer_contracts": {
+      "n": 25,
+      "n_on": 25,
+      "n_off": 0,
+      "false_block_rate": 0.0,
+      "false_block_ci95": [
+        0.0,
+        0.1332
+      ],
+      "false_blocks": 0,
+      "slip_rate": 0.0,
+      "slip_ci95": [
+        0.0,
+        1.0
+      ],
+      "slips": 0,
+      "defer_rate": 0.08,
+      "accuracy_at_0.5": 1.0
+    },
+    "source=generated": {
+      "n": 174,
+      "n_on": 129,
+      "n_off": 45,
+      "false_block_rate": 0.0078,
+      "false_block_ci95": [
+        0.0014,
+        0.0426
+      ],
+      "false_blocks": 1,
+      "slip_rate": 0.0,
+      "slip_ci95": [
+        0.0,
+        0.0787
+      ],
+      "slips": 0,
+      "defer_rate": 0.0345,
+      "accuracy_at_0.5": 0.9885,
+      "auc": 0.9972
+    },
+    "source=law_se": {
+      "n": 52,
+      "n_on": 52,
+      "n_off": 0,
+      "false_block_rate": 0.0192,
+      "false_block_ci95": [
+        0.0034,
+        0.1012
+      ],
+      "false_blocks": 1,
+      "slip_rate": 0.0,
+      "slip_ci95": [
+        0.0,
+        1.0
+      ],
+      "slips": 0,
+      "defer_rate": 0.25,
+      "accuracy_at_0.5": 0.9231
+    },
+    "source=privacyqa": {
+      "n": 52,
+      "n_on": 51,
+      "n_off": 1,
+      "false_block_rate": 0.0,
+      "false_block_ci95": [
+        0.0,
+        0.07
+      ],
+      "false_blocks": 0,
+      "slip_rate": 0.0,
+      "slip_ci95": [
+        0.0,
+        0.7935
+      ],
+      "slips": 0,
+      "defer_rate": 0.1346,
+      "accuracy_at_0.5": 0.9808,
+      "auc": 1.0
+    },
+    "source=wildchat": {
+      "n": 68,
+      "n_on": 3,
+      "n_off": 65,
+      "false_block_rate": 0.3333,
+      "false_block_ci95": [
+        0.0615,
+        0.7923
+      ],
+      "false_blocks": 1,
+      "slip_rate": 0.0308,
+      "slip_ci95": [
+        0.0085,
+        0.1054
+      ],
+      "slips": 2,
+      "defer_rate": 0.0735,
+      "accuracy_at_0.5": 0.9265,
+      "auc": 0.9487
+    },
+    "hard": {
+      "n": 54,
+      "n_on": 7,
+      "n_off": 47,
+      "false_block_rate": 0.2857,
+      "false_block_ci95": [
+        0.0822,
+        0.6411
+      ],
+      "false_blocks": 2,
+      "slip_rate": 0.0,
+      "slip_ci95": [
+        0.0,
+        0.0756
+      ],
+      "slips": 0,
+      "defer_rate": 0.1852,
+      "accuracy_at_0.5": 0.9259,
+      "auc": 0.848
+    },
+    "not_hard": {
+      "n": 368,
+      "n_on": 256,
+      "n_off": 112,
+      "false_block_rate": 0.0039,
+      "false_block_ci95": [
+        0.0007,
+        0.0218
+      ],
+      "false_blocks": 1,
+      "slip_rate": 0.0179,
+      "slip_ci95": [
+        0.0049,
+        0.0628
+      ],
+      "slips": 2,
+      "defer_rate": 0.087,
+      "accuracy_at_0.5": 0.9701,
+      "auc": 0.995
+    },
+    "errors": [
+      {
+        "text": "&quot;Flash of Genius&quot; - Intermittent Windshield Wipers",
+        "label": "ON_TOPIC",
+        "decision": "block",
+        "p_off": 0.9796,
+        "source": "law_se",
+        "rule": "OFF-6"
+      },
+      {
+        "text": "Can you get a transcript of the video: https://www.youtube.com/watch?v=WLbnYxOrir8 Copyright no longer applies, since the video was made so long ago.",
+        "label": "OFF_TOPIC",
+        "decision": "allow",
+        "p_off": 0.0283,
+        "source": "wildchat",
+        "rule": "OFF-3"
+      },
+      {
+        "text": "Explain the payment schedule in the document and also set a reminder for my team meeting tomorrow.",
+        "label": "ON_TOPIC",
+        "decision": "block",
+        "p_off": 0.9063,
+        "source": "generated",
+        "rule": "ON-10"
+      },
+      {
+        "text": "Can you summarize this paragraph? The occurrences of interactive markers are not statistically significant but sometimes even low occurrences are meaningful and worth noting from a genre-specific poin",
+        "label": "OFF_TOPIC",
+        "decision": "allow",
+        "p_off": 0.0995,
+        "source": "wildchat",
+        "rule": "OFF-7"
+      },
+      {
+        "text": "Write a response letter. Use a serious professional tone. Address this communication to the Federal Employees Program. I would like to state for the record I have requested in writing asking for reaso",
+        "label": "ON_TOPIC",
+        "decision": "block",
+        "p_off": 0.8585,
+        "source": "wildchat",
+        "rule": "ON-8"
+      }
+    ],
+    "deferred": [
+      {
+        "text": "what can i ask you all about",
+        "label": "ON_TOPIC",
+        "p_off": 0.5545
+      },
+      {
+        "text": "Financial dependency while over age of majority",
+        "label": "ON_TOPIC",
+        "p_off": 0.5578
+      },
+      {
+        "text": "The new fitness app tracks heart rate, steps, and sleep cycles, offering personalized workout recommendations. Users report increased motivation and better sleep quality after two weeks of use. Howeve",
+        "label": "OFF_TOPIC",
+        "p_off": 0.4565
+      },
+      {
+        "text": "can i get vacation day totals i have left",
+        "label": "OFF_TOPIC",
+        "p_off": 0.5802
+      },
+      {
+        "text": "Cancel contract ordered from online shop via email in Germany",
+        "label": "ON_TOPIC",
+        "p_off": 0.198
+      },
+      {
+        "text": "Arizona laws regarding ownership of ground glassware for chemistry usage",
+        "label": "ON_TOPIC",
+        "p_off": 0.1961
+      },
+      {
+        "text": "package com.example.anicedemo; import android.content.Context; import android.util.AttributeSet; import android.widget.TextView; import androidx.annotation.Nullable; public class MyTextView extends Te",
+        "label": "OFF_TOPIC",
+        "p_off": 0.5685
+      },
+      {
+        "text": "what question did you just ask me",
+        "label": "ON_TOPIC",
+        "p_off": 0.5634
+      },
+      {
+        "text": "how much are my state taxes",
+        "label": "OFF_TOPIC",
+        "p_off": 0.6967
+      },
+      {
+        "text": "Can Walmart ban shoppers who wear Nazi face masks from entering in California?",
+        "label": "ON_TOPIC",
+        "p_off": 0.3135
+      },
+      {
+        "text": "Explain the subordinate clause in the German sentence: \"Wenn ich Zeit habe, gehe ich joggen.\"",
+        "label": "OFF_TOPIC",
+        "p_off": 0.6977
+      },
+      {
+        "text": "In Australia if you are working from home and your employer is based in another state which public holiday do you get?",
+        "label": "ON_TOPIC",
+        "p_off": 0.5298
+      },
+      {
+        "text": "Can an AI admit to guilt?",
+        "label": "ON_TOPIC",
+        "p_off": 0.2336
+      },
+      {
+        "text": "please redraft in a formal way, 1. Amendment to Section 2.2. - The notice period in the probationary period will be changed from 1-week advance written notice to 1 month and will be amended, as follow",
+        "label": "ON_TOPIC",
+        "p_off": 0.1508
+      },
+      {
+        "text": "Can eBay suspend my account if my credit card doesnt work?",
+        "label": "ON_TOPIC",
+        "p_off": 0.4241
+      },
+      {
+        "text": "Please could you help to request and upload the payroll data for the below requested period for the following departed assignees (under short term assignments to HK) to the Document Library? In additi",
+        "label": "OFF_TOPIC",
+        "p_off": 0.4883
+      },
+      {
+        "text": "Icy conditions, who is to blame?",
+        "label": "ON_TOPIC",
+        "p_off": 0.6247
+      },
+      {
+        "text": "When is a drink classed as alcohol in the UK?",
+        "label": "ON_TOPIC",
+        "p_off": 0.1844
+      },
+      {
+        "text": "do you track my location in real time.",
+        "label": "ON_TOPIC",
+        "p_off": 0.4168
+      },
+      {
+        "text": "what is needed to start a water remediation company",
+        "label": "OFF_TOPIC",
+        "p_off": 0.2477
+      },
+      {
+        "text": "do i need to read any travel alerts for kenya",
+        "label": "OFF_TOPIC",
+        "p_off": 0.6698
+      },
+      {
+        "text": "is this site free on chats?",
+        "label": "ON_TOPIC",
+        "p_off": 0.4276
+      },
+      {
+        "text": "does it read my emails?",
+        "label": "ON_TOPIC",
+        "p_off": 0.1765
+      },
+      {
+        "text": "ask for help from colleague as I am not familiar with the process and I did it for one time: \"Hi Posky, is it ok to let China team send you the workflow for tdy? '",
+        "label": "OFF_TOPIC",
+        "p_off": 0.7378
+      },
+      {
+        "text": "Can male guardians prevent Egyptian women from leaving the country?",
+        "label": "ON_TOPIC",
+        "p_off": 0.1585
+      },
+      {
+        "text": "How do I calculate the compound interest on a savings account with monthly compounding over five years?",
+        "label": "OFF_TOPIC",
+        "p_off": 0.638
+      },
+      {
+        "text": "Can Instagram sometimes change my username?",
+        "label": "ON_TOPIC",
+        "p_off": 0.35
+      },
+      {
+        "text": "Using an openload server for free",
+        "label": "ON_TOPIC",
+        "p_off": 0.2997
+      },
+      {
+        "text": "Explain the subordinate clause in the German sentence: \"Wenn ich Zeit habe, komme ich vorbei.\"",
+        "label": "OFF_TOPIC",
+        "p_off": 0.7298
+      },
+      {
+        "text": "Draft a 500-word article explaining the historical development of the doctrine of consideration in contract law.",
+        "label": "OFF_TOPIC",
+        "p_off": 0.7712
+      },
+      {
+        "text": "How should you respond if called to testify in court without committing perjury?",
+        "label": "ON_TOPIC",
+        "p_off": 0.4267
+      },
+      {
+        "text": "What are the terms of a geometric series when calculating the sum of its first ten elements?",
+        "label": "OFF_TOPIC",
+        "p_off": 0.7405
+      },
+      {
+        "text": "either of them could be i'm not sure",
+        "label": "OFF_TOPIC",
+        "p_off": 0.7577
+      },
+      {
+        "text": "what is the location of this user",
+        "label": "ON_TOPIC",
+        "p_off": 0.3791
+      },
+      {
+        "text": "whats it do different than other apps.",
+        "label": "ON_TOPIC",
+        "p_off": 0.3785
+      },
+      {
+        "text": "can you tell me when my cable bill is due",
+        "label": "OFF_TOPIC",
+        "p_off": 0.6857
+      },
+      {
+        "text": "do you need login info for my reddit?",
+        "label": "ON_TOPIC",
+        "p_off": 0.2517
+      },
+      {
+        "text": "Could the right to &quot;life&quot; in the constitution be used by the supreme court to reject a federal law forbidding abortion bans?",
+        "label": "ON_TOPIC",
+        "p_off": 0.191
+      },
+      {
+        "text": "are restaurants recommended to me at random or is there a bias?",
+        "label": "ON_TOPIC",
+        "p_off": 0.7113
+      },
+      {
+        "text": "will you respond to adam instead of the current name",
+        "label": "OFF_TOPIC",
+        "p_off": 0.6671
+      },
+      {
+        "text": "can you give the definition of deiscretionary",
+        "label": "ON_TOPIC",
+        "p_off": 0.7059
+      },
+      {
+        "text": "Selling a college house",
+        "label": "ON_TOPIC",
+        "p_off": 0.1778
+      }
+    ]
+  }
+}

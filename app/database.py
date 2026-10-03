@@ -1,6 +1,8 @@
 import os
 import re
+import threading
 import time
+from collections import OrderedDict
 from typing import Any, List
 from dotenv import load_dotenv
 from cohere.errors.too_many_requests_error import TooManyRequestsError
@@ -20,19 +22,40 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 from pydantic import ConfigDict
 
+EMBEDDING_MODEL = "Snowflake/snowflake-arctic-embed-l-v2.0"
+
+# Query embeddings are cached by exact text: the off-topic classifier
+# (app/offtopic_classifier.py) embeds every question before retrieval, and retrieval
+# embeds the same question again unless rephrase_question() reworded it — the cache
+# turns that second HF API call into a dict lookup. Embeddings are a pure function of
+# the text, so sharing the cache across users exposes nothing.
+_QUERY_CACHE_SIZE = 256
+_query_cache: "OrderedDict[str, list[float]]" = OrderedDict()
+_query_cache_lock = threading.Lock()
+
+
 # Served via HF's Inference Providers router using HUGGINGFACEHUB_API_TOKEN.
 # This model is asymmetric: queries need a "query: " prefix, documents are
 # embedded plain (per the model card), so embed_query is overridden below.
 class _ArcticLegalEmbeddings(HuggingFaceEndpointEmbeddings):
     def embed_query(self, text: str) -> list[float]:
-        return self.embed_documents([f"query: {text}"])[0]
+        with _query_cache_lock:
+            if text in _query_cache:
+                _query_cache.move_to_end(text)
+                return list(_query_cache[text])
+        vector = self.embed_documents([f"query: {text}"])[0]
+        with _query_cache_lock:
+            _query_cache[text] = vector
+            if len(_query_cache) > _QUERY_CACHE_SIZE:
+                _query_cache.popitem(last=False)
+        return list(vector)
 
     async def aembed_query(self, text: str) -> list[float]:
         return (await self.aembed_documents([f"query: {text}"]))[0]
 
 
 embeddings = _ArcticLegalEmbeddings(
-    model="Snowflake/snowflake-arctic-embed-l-v2.0",
+    model=EMBEDDING_MODEL,
     task="feature-extraction",
     model_kwargs={"normalize": True},
 )

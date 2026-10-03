@@ -35,3 +35,7 @@ Evaluation/CUAD_v1.json
 # Claude Code project instructions (local AI-assistant context, not part of the app)
 CLAUDE.md
 .aider*
+
+# Off-topic classifier: raw public-dataset pulls (re-fetchable via fetch_sources.py) and embedding cache
+Evaluation/offtopic/data/raw/
+Evaluation/offtopic/data/emb/

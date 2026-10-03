@@ -34,7 +34,7 @@ _REFUSAL_MARKERS = (
 from app.loader import process_pdf
 from app.database import save_chunks_to_vector_db, get_reranking_retriever, get_full_document_context, delete_user_document, attribute_answer_to_parents, QDRANT_URL, QDRANT_API_KEY
 from pydantic import BaseModel, Field, field_validator
-from app.generator import stream_answer, verify_answer_claims, rephrase_question, needs_rephrasing, needs_full_document_read, classify_intent, is_off_topic_request, is_off_topic_llm, QueryIntent
+from app.generator import stream_answer, verify_answer_claims, rephrase_question, needs_rephrasing, needs_full_document_read, classify_intent, is_off_topic, QueryIntent
 from groq import RateLimitError
 from cohere.errors.too_many_requests_error import TooManyRequestsError
 from app.compare import retrieve_per_doc, stream_comparison
@@ -424,7 +424,7 @@ async def ask_question(
 
     def event_stream():
         try:
-            if is_off_topic_request(body.question) or is_off_topic_llm(body.question):
+            if is_off_topic(body.question):
                 canned = "I cannot answer this based on the provided documents. No relevant context was found."
                 yield f"data: {json.dumps({'type': 'token', 'content': canned})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'sources': []})}\n\n"
@@ -592,7 +592,7 @@ async def compare_documents(
     if body.session_id:
         _get_owned_session(db, body.session_id, current_user.id)  # 404s up front rather than mid-stream
 
-    if is_off_topic_request(body.query) or is_off_topic_llm(body.query):
+    if is_off_topic(body.query):
         coverage = {doc_id: False for doc_id in body.doc_ids}
         canned = "I cannot answer this based on the provided documents. No relevant context was found."
 
