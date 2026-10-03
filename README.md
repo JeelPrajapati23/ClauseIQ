@@ -386,7 +386,17 @@ The off-topic gate used to send every question to Gemini with a yes/no prompt. T
 | Off-topic questions let through | 2.6% (1/38) | 0% (0/38) |
 | Accuracy | 76% | 99% |
 | Gemini calls per question (gate only) | 1.0 | 0.09 |
-| Gate latency | ~2 s median (Gemini call) | ~0.3 s (embedding, reused by retrieval) |
+| Gate latency, median / 90th pct | 1,955 ms / 4,288 ms | **362 ms / 921 ms** (~5× faster) |
+
+**Latency, same 100 questions, measured from one machine** (`benchmark_latency.py`; old-gate times are the Gemini calls recorded during the comparison run):
+
+| Gate latency (ms) | Median | Mean | 90th pct | 99th pct | Worst |
+|---|---|---|---|---|---|
+| Old: Gemini call on every question | 1,955 | 2,487 | 4,288 | 9,284 | 10,371 |
+| New: whole gate | **362** | **563** | 921 | 2,535 | 5,087 |
+| New, decided without Gemini (91/100) | 360 | 397 | 469 | 921 | 985 |
+
+The new gate's time is almost all the Hugging Face embedding call; the classifier itself takes about 0.1 ms. Its slow tail is the 9% of questions it sends on to Gemini. In production the cost is lower still: an allowed question needs that same embedding for retrieval anyway, and it's cached, so for most on-topic questions the gate adds well under a millisecond. The old gate's Gemini call was pure added wait on every question.
 
 About a third of the old gate's 23 false blocks come from the guide deliberately widening the boundary (general legal questions are now on-topic). The rest were core usage the old prompt got wrong by its own definition: pasted clauses, negotiation questions, privacy-policy questions.
 
@@ -407,6 +417,7 @@ python Evaluation/offtopic/finalize_test_set.py --reviewer <who reviewed test_to
 python Evaluation/offtopic/embed_dataset.py
 python Evaluation/offtopic/train_classifier.py
 python Evaluation/offtopic/compare_classifiers.py --dry-run   # uses live Gemini quota; check the call count first
+python Evaluation/offtopic/benchmark_latency.py               # reuses the comparison's recorded Gemini timings; no Gemini quota
 ```
 
 ---

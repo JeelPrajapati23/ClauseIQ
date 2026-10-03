@@ -1,0 +1,45 @@
+{
+  "old_gate_gemini_ms": {
+    "n": 100,
+    "mean": 2486.9,
+    "p50": 1954.5,
+    "p90": 4288.1,
+    "p99": 9284.0,
+    "max": 10371.0
+  },
+  "new_gate_total_ms": {
+    "n": 100,
+    "mean": 563.1,
+    "p50": 361.7,
+    "p90": 921.1,
+    "p99": 2535.3,
+    "max": 5087.3
+  },
+  "new_gate_embedding_ms": {
+    "n": 100,
+    "mean": 392.6,
+    "p50": 359.3,
+    "p90": 462.4,
+    "p99": 914.6,
+    "max": 985.3
+  },
+  "new_gate_scoring_ms": {
+    "n": 100,
+    "mean": 0.1,
+    "p50": 0.1,
+    "p90": 0.1,
+    "p99": 0.1,
+    "max": 0.1
+  },
+  "new_gate_decided_without_gemini_ms": {
+    "n": 91,
+    "mean": 396.9,
+    "p50": 359.7,
+    "p90": 468.5,
+    "p99": 921.1,
+    "max": 985.3
+  },
+  "deferred_to_gemini": 9,
+  "speedup_mean": 4.4,
+  "speedup_p50": 5.4
+}
